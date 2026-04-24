@@ -1,0 +1,301 @@
+{# prompts.html — prompt list with search/sort, detail page with histogram and outlier flags #}
+{% extends "base.html" %}
+
+{% block title %}Prompts — burnmap{% endblock %}
+
+{% block content %}
+<div x-data="promptsPage()" x-init="load()">
+
+  <!-- List view -->
+  <template x-if="!selectedFp">
+    <div>
+      <div class="page-header">
+        <h1 class="page-title">Prompts</h1>
+        <span class="meta" style="font-size:12px;color:var(--ink-3)">search · sort · detail</span>
+      </div>
+
+      <!-- Search + sort controls -->
+      <div class="row" style="margin-bottom:14px;gap:8px;flex-wrap:wrap">
+        <input class="search-input"
+               type="search"
+               placeholder="Search prompt text…"
+               x-model="search"
+               @input.debounce.300ms="load()"/>
+        <select class="sort-select" x-model="sort" @change="load()">
+          <option value="cost">Sort: Cost</option>
+          <option value="runs">Sort: Runs</option>
+          <option value="tokens">Sort: Tokens</option>
+          <option value="recent">Sort: Recent</option>
+        </select>
+        <span class="spacer"></span>
+        <span class="mono muted" style="font-size:11px;align-self:center"
+              x-text="count + ' prompts'"></span>
+      </div>
+
+      <template x-if="loading">
+        <div class="loading-row">Loading…</div>
+      </template>
+
+      <template x-if="!loading && rows.length === 0">
+        <div class="loading-row">No prompts found.</div>
+      </template>
+
+      <template x-if="!loading && rows.length > 0">
+        <div class="card" style="overflow-x:auto">
+          <table class="t">
+            <thead>
+              <tr>
+                <th>Prompt</th>
+                <th>Agent</th>
+                <th class="right">Runs</th>
+                <th class="right">Tokens</th>
+                <th class="right">Cost</th>
+                <th>Last seen</th>
+                <th>Flag</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="p in rows" :key="p.fingerprint">
+                <tr @click="openDetail(p.fingerprint)" style="cursor:pointer">
+                  <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                    <span class="mono" style="font-size:11px" x-text="p.snippet || '(no text)'"></span>
+                  </td>
+                  <td>
+                    <span class="agent-badge"
+                          :class="p.agent ? 'agent-badge--' + p.agent.replace('_', '-') : ''"
+                          x-text="p.agent || '—'"></span>
+                  </td>
+                  <td class="num right" x-text="(p.run_count || 0).toLocaleString()"></td>
+                  <td class="num right" x-text="fmtTok(p.total_tokens)"></td>
+                  <td class="num right mono" x-text="'$' + (p.total_cost || 0).toFixed(4)"></td>
+                  <td class="mono muted" style="font-size:11px" x-text="fmtTime(p.last_seen)"></td>
+                  <td>
+                    <template x-if="p.is_outlier">
+                      <span class="chip chip--outlier" title="≥1 outlier run (2σ)">2σ</span>
+                    </template>
+                    <template x-if="!p.is_outlier">
+                      <span class="mono muted">—</span>
+                    </template>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </div>
+  </template>
+
+  <!-- Detail view -->
+  <template x-if="selectedFp">
+    <div>
+      <div class="page-header">
+        <button class="back-btn" @click="closeDetail()">← Prompts</button>
+        <h1 class="page-title">Prompt detail</h1>
+        <template x-if="detail && detail.sigma_flag">
+          <span class="chip chip--outlier" style="margin-left:8px">2σ outlier</span>
+        </template>
+      </div>
+
+      <template x-if="detailLoading">
+        <div class="loading-row">Loading detail…</div>
+      </template>
+
+      <template x-if="!detailLoading && detail">
+        <div>
+          <!-- Prompt text card -->
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-label">Prompt text</div>
+            <pre class="prompt-text" x-text="detail.content"></pre>
+          </div>
+
+          <!-- Stats row -->
+          <div class="row stats-row" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
+            <div class="stat-card">
+              <div class="stat-val" x-text="(detail.run_count || 0).toLocaleString()"></div>
+              <div class="stat-label">Runs</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-val" x-text="fmtTok(detail.total_tokens)"></div>
+              <div class="stat-label">Total tokens</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-val mono" x-text="'$' + (detail.total_cost || 0).toFixed(4)"></div>
+              <div class="stat-label">Total cost</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-val" x-text="detail.outlier_run_count || 0"></div>
+              <div class="stat-label">Outlier runs</div>
+            </div>
+          </div>
+
+          <!-- Cost histogram -->
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-label">Per-run cost histogram</div>
+            <template x-if="detail.histogram && detail.histogram.length > 0">
+              <div class="histogram" style="display:flex;align-items:flex-end;gap:3px;height:80px;padding:8px 0">
+                <template x-for="(bucket, i) in detail.histogram" :key="i">
+                  <div style="display:flex;flex-direction:column;align-items:center;flex:1">
+                    <div class="histogram-bar"
+                         :style="'height:' + barHeight(bucket.count) + 'px; background: var(--accent);'"
+                         :title="'$' + bucket.bucket_start.toFixed(5) + ' — ' + bucket.count + ' runs'">
+                    </div>
+                    <div class="mono muted" style="font-size:9px;margin-top:2px"
+                         x-text="'$' + (bucket.bucket_start || 0).toFixed(4)"></div>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!detail.histogram || detail.histogram.length === 0">
+              <div class="muted" style="padding:16px;font-size:12px">No histogram data.</div>
+            </template>
+          </div>
+
+          <!-- Runs table -->
+          <div class="card">
+            <div class="card-label">Recent runs</div>
+            <table class="t">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Session</th>
+                  <th class="right">Tokens</th>
+                  <th class="right">Cost</th>
+                  <th>Outlier</th>
+                  <th>Trace</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(run, i) in detail.runs" :key="i">
+                  <tr>
+                    <td class="mono muted" style="font-size:11px" x-text="fmtTime(run.ts)"></td>
+                    <td>
+                      <span class="mono" style="font-size:11px"
+                            x-text="run.session_id ? run.session_id.slice(0, 12) + '…' : '—'"></span>
+                    </td>
+                    <td class="num right" x-text="fmtTok(run.input_tokens)"></td>
+                    <td class="num right mono" x-text="'$' + (run.cost_usd || 0).toFixed(5)"></td>
+                    <td>
+                      <template x-if="run.is_outlier_run">
+                        <span class="chip chip--outlier">2σ</span>
+                      </template>
+                      <template x-if="!run.is_outlier_run">
+                        <span class="mono muted">—</span>
+                      </template>
+                    </td>
+                    <td>
+                      <template x-if="run.session_id">
+                        <a :href="'/trace/' + run.session_id" class="link" style="font-size:11px">→ trace</a>
+                      </template>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+    </div>
+  </template>
+
+</div>
+
+<style>
+.page-header    { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+.page-title     { font-size:20px; font-weight:600; }
+.loading-row    { padding:40px; text-align:center; color:var(--ink-3); }
+.search-input   { padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px; background:var(--surface); color:var(--ink); }
+.sort-select    { padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px; background:var(--surface); color:var(--ink); }
+.spacer         { flex:1; }
+.row            { display:flex; }
+.num            { font-family:var(--font-mono); font-size:12px; }
+.right          { text-align:right; }
+.muted          { color:var(--ink-3); }
+.mono           { font-family:var(--font-mono); }
+.card           { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; }
+.card-label     { font-size:11px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px; }
+.agent-badge    { display:inline-block; padding:1px 6px; border-radius:4px; font-size:11px; font-family:var(--font-mono); background:var(--surface-2); color:var(--ink-2); }
+.agent-badge--claude-code { background:#dbeafe; color:#1e40af; }
+.agent-badge--codex       { background:#dcfce7; color:#14532d; }
+.agent-badge--aider       { background:#fce7f3; color:#831843; }
+.chip           { display:inline-block; padding:1px 7px; border-radius:4px; font-size:11px; font-family:var(--font-mono); }
+.chip--outlier  { background:#fee2e2; color:#991b1b; }
+.back-btn       { padding:4px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--ink); cursor:pointer; font-size:13px; }
+.back-btn:hover { background:var(--surface-2); }
+.prompt-text    { font-family:var(--font-mono); font-size:12px; white-space:pre-wrap; word-break:break-word; margin:0; color:var(--ink-2); max-height:200px; overflow-y:auto; }
+.stat-card      { background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:12px 16px; min-width:100px; text-align:center; }
+.stat-val       { font-size:20px; font-weight:600; }
+.stat-label     { font-size:11px; color:var(--ink-3); margin-top:2px; }
+.histogram-bar  { min-height:2px; border-radius:2px 2px 0 0; width:100%; }
+.link           { color:var(--accent); text-decoration:none; }
+.link:hover     { text-decoration:underline; }
+</style>
+
+<script>
+function promptsPage() {
+  return {
+    rows: [],
+    count: 0,
+    loading: false,
+    search: '',
+    sort: 'cost',
+    selectedFp: null,
+    detail: null,
+    detailLoading: false,
+
+    async load() {
+      this.loading = true;
+      try {
+        let url = '/api/prompts?limit=200';
+        if (this.search) url += '&search=' + encodeURIComponent(this.search);
+        if (this.sort)   url += '&sort=' + encodeURIComponent(this.sort);
+        const r = await fetch(url);
+        const d = await r.json();
+        this.rows  = d.prompts || [];
+        this.count = d.count || 0;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async openDetail(fp) {
+      this.selectedFp = fp;
+      this.detail = null;
+      this.detailLoading = true;
+      try {
+        const r = await fetch('/api/prompts/' + fp);
+        this.detail = await r.json();
+      } finally {
+        this.detailLoading = false;
+      }
+    },
+
+    closeDetail() {
+      this.selectedFp = null;
+      this.detail = null;
+    },
+
+    barHeight(count) {
+      if (!this.detail || !this.detail.histogram) return 0;
+      const max = Math.max(...this.detail.histogram.map(b => b.count), 1);
+      return Math.round((count / max) * 60);
+    },
+
+    fmtTime(ms) {
+      if (!ms) return '—';
+      return new Date(ms).toLocaleString(undefined, {
+        month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    },
+
+    fmtTok(n) {
+      if (!n) return '0';
+      if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+      if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+      return String(n);
+    },
+  };
+}
+</script>
+{% endblock %}
