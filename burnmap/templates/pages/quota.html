@@ -1,0 +1,157 @@
+{# quota.html — Quota page: 5-hour block + weekly window + recent blocks grid + plan selector #}
+{% extends "base.html" %}
+
+{% block title %}Quotas — burnmap{% endblock %}
+
+{% block content %}
+<div x-data="quotaPage()" x-init="load()">
+
+  <div class="page-header">
+    <h1 class="page-title">Quotas · Claude subscription</h1>
+    <span class="meta" x-text="plan + ' plan · P90 auto-detected'">Max20 plan · P90 auto-detected</span>
+  </div>
+
+  <p class="page-sub">Rolling 5-hour blocks and the weekly window. Marks indicate your historical P90 ceiling.</p>
+
+  <template x-if="loading">
+    <div class="loading-row">Loading…</div>
+  </template>
+
+  <template x-if="!loading">
+    <div>
+
+      <!-- Current block + weekly window -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+        <!-- Current 5-hour block -->
+        <div class="card">
+          <div class="card__h">
+            <h3>Current 5-hour block</h3>
+            <span class="spacer"></span>
+            <span class="mono muted" style="font-size:11px" x-text="data.block_eta"></span>
+          </div>
+          <div class="card__body">
+            <div class="row" style="align-items:baseline;gap:10px">
+              <span class="num" style="font-size:34px" x-text="'$' + data.block_cost.toFixed(2)">$0.00</span>
+              <span class="muted mono" style="font-size:12px"
+                x-text="'of ~$' + data.block_limit + ' · ' + (data.block_pct*100).toFixed(0) + '%'"></span>
+              <span class="spacer"></span>
+            </div>
+            <!-- Progress bar -->
+            <div style="position:relative;height:18px;background:var(--rule-soft);border-radius:3px;margin-top:10px;overflow:hidden">
+              <div :style="'height:100%;border-radius:3px;background:' + (data.block_pct > 0.9 ? '#ef4444' : data.block_pct > 0.7 ? '#f59e0b' : 'var(--accent)') + ';width:' + (data.block_pct*100).toFixed(1) + '%'"></div>
+            </div>
+            <!-- P90 label -->
+            <div class="row" style="font-size:11px;margin-top:6px">
+              <span>0</span>
+              <span class="spacer"></span>
+              <span x-text="'P90 · $' + data.p90_block"></span>
+              <span class="spacer"></span>
+              <span x-text="'$' + data.block_limit"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Weekly window -->
+        <div class="card">
+          <div class="card__h">
+            <h3>Weekly window</h3>
+            <span class="spacer"></span>
+            <span class="mono muted" style="font-size:11px" x-text="data.week_eta"></span>
+          </div>
+          <div class="card__body">
+            <div class="row" style="align-items:baseline;gap:10px">
+              <span class="num" style="font-size:34px" x-text="'$' + data.week_cost.toFixed(0)">$0</span>
+              <span class="muted mono" style="font-size:12px"
+                x-text="'of ~$' + data.week_limit + ' · ' + (data.week_pct*100).toFixed(0) + '%'"></span>
+            </div>
+            <!-- Progress bar -->
+            <div style="position:relative;height:18px;background:var(--rule-soft);border-radius:3px;margin-top:10px;overflow:hidden">
+              <div :style="'height:100%;border-radius:3px;background:' + (data.week_pct > 0.9 ? '#ef4444' : data.week_pct > 0.7 ? '#f59e0b' : 'var(--accent)') + ';width:' + (data.week_pct*100).toFixed(1) + '%'"></div>
+            </div>
+            <div class="row" style="font-size:11px;margin-top:6px">
+              <span>0</span>
+              <span class="spacer"></span>
+              <span x-text="'$' + data.week_limit"></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Recent 5-hour blocks grid (last 72h) -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card__h">
+          <h3>Recent 5-hour blocks</h3>
+          <span class="meta">last 72h</span>
+        </div>
+        <div class="card__body">
+          <template x-if="data.blocks.length === 0">
+            <p class="muted mono" style="font-size:12px">No block data in the last 72 hours.</p>
+          </template>
+          <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px">
+            <template x-for="(b, i) in data.blocks" :key="i">
+              <div :style="'border:1px solid var(--rule-soft);border-radius:4px;padding:10px;background:' + (b.stuck ? '#fdf1f1' : 'var(--paper)')">
+                <div class="mono muted" style="font-size:10px" x-text="b.day + ' · ' + b.label"></div>
+                <div class="num" style="font-size:15px;margin-top:4px" x-text="'$' + b.cost.toFixed(2)"></div>
+                <!-- Mini bar -->
+                <div style="height:4px;background:var(--rule-soft);border-radius:2px;margin-top:6px">
+                  <div :style="'height:100%;border-radius:2px;background:' + (b.stuck ? '#ef4444' : 'var(--accent)') + ';width:' + (b.pct*100).toFixed(1) + '%'"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- Plan selector -->
+      <div class="card">
+        <div class="card__h"><h3>Plan</h3></div>
+        <div class="card__body">
+          <div class="row" style="gap:8px">
+            <template x-for="p in data.plans" :key="p">
+              <button
+                class="btn"
+                :style="plan === p ? 'border-color:var(--ink);background:var(--paper-2)' : ''"
+                @click="selectPlan(p)"
+                x-text="p">
+              </button>
+            </template>
+            <span class="spacer"></span>
+            <span class="mono muted" style="font-size:11px">P90 auto · last recomputed at load</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </template>
+
+</div>
+
+<script>
+function quotaPage() {
+  return {
+    loading: true,
+    plan: 'Max20',
+    data: {
+      block_cost: 0, block_limit: 380, block_pct: 0, block_eta: '—',
+      week_cost: 0,  week_limit: 3800, week_pct: 0,  week_eta: '—',
+      p90_block: 0, blocks: [], plans: ['Pro','Max5','Max20','Custom'],
+    },
+
+    async load() {
+      this.loading = true;
+      const r = await fetch('/api/quota?plan=' + encodeURIComponent(this.plan));
+      this.data = await r.json();
+      this.plan = this.data.plan;
+      this.loading = false;
+    },
+
+    selectPlan(p) {
+      this.plan = p;
+      this.load();
+    },
+  };
+}
+</script>
+{% endblock %}
