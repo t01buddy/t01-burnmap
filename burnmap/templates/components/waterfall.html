@@ -1,0 +1,104 @@
+{# waterfall.html — Gantt-style waterfall component for the trace tree page.
+   Usage: {% from "components/waterfall.html" import waterfall_tab %}
+          {{ waterfall_tab(trace) }}
+
+   trace object shape (same as trace_tree.html context):
+     .total_tokens (int), .duration_ms (int, 0 = use token-proportional fallback)
+     .tree — root span node (recursive .children list)
+   Each span node:
+     .id, .label, .kind ('turn'|'tool'|'subagent'|'slash'|'skill'), .tokens (int),
+     .cost (float), .loop (bool),
+     .started_at (int ms epoch, 0 = unknown), .ended_at (int ms epoch, 0 = unknown)
+#}
+
+{# ── Color map: kind → CSS var ──────────────────────────────────────── #}
+{% set KIND_COLORS = {
+  "turn":     "var(--ink-3)",
+  "tool":     "var(--heat-3)",
+  "subagent": "var(--subagent)",
+  "slash":    "var(--heat-2)",
+  "skill":    "var(--heat-4)"
+} %}
+{% set LOOP_COLOR = "var(--alert)" %}
+
+{# ── Flatten trace tree into rows (DFS, token-offset fallback) ─────── #}
+{# We use a recursive macro to flatten because Jinja2 has no loops with  #}
+{# mutable accumulator state. Each row carries depth, start%, width%.    #}
+{# When duration_ms > 0 and started_at > 0 we use real timestamps;       #}
+{# otherwise we fall back to cumulative token proportions.               #}
+
+{% macro _span_rows(node, depth, tok_offset, total_toks, total_dur_ms, use_ts, ts_origin) %}
+  {%- set node_dur_tok = node.tokens if node.tokens > 0 else 1 -%}
+  {%- if use_ts and node.started_at and node.ended_at -%}
+    {%- set start_pct = ((node.started_at - ts_origin) / total_dur_ms * 100) | round(2) -%}
+    {%- set width_pct = ((node.ended_at - node.started_at) / total_dur_ms * 100) | round(2) | max(0.5) -%}
+  {%- else -%}
+    {%- set start_pct = (tok_offset / total_toks * 100) | round(2) -%}
+    {%- set width_pct = (node_dur_tok / total_toks * 100) | round(2) | max(0.5) -%}
+  {%- endif -%}
+  {%- set bar_color = LOOP_COLOR if node.loop else KIND_COLORS.get(node.kind, "var(--heat-3)") -%}
+  {%- set short_label = node.label[:32] ~ "…" if node.label | length > 32 else node.label -%}
+  <div class="wf-row" data-kind="{{ node.kind }}" data-id="{{ node.id }}">
+    <span class="wf-label" style="padding-left: {{ depth * 14 }}px;">
+      <i class="wf-dot" style="background: {{ bar_color }};"></i>
+      {{ short_label | e }}
+    </span>
+    <div class="wf-track">
+      <div class="wf-bar"
+           style="left: {{ start_pct }}%; width: {{ width_pct }}%; background: {{ bar_color }};"
+           title="{{ node.label | e }} · {{ node.tokens }} tok · {{ node.cost | round(4) }} $">
+      </div>
+    </div>
+    <span class="wf-cost num muted">{{ "$%.4f" | format(node.cost) }}</span>
+  </div>
+  {%- if node.children -%}
+    {%- set child_offset = tok_offset -%}
+    {%- for child in node.children -%}
+      {{ _span_rows(child, depth + 1, child_offset, total_toks, total_dur_ms, use_ts, ts_origin) }}
+      {%- set child_offset = child_offset + child.tokens -%}
+    {%- endfor -%}
+  {%- endif -%}
+{% endmacro %}
+
+
+{% macro waterfall_tab(trace) %}
+{%- set total_toks  = trace.total_tokens if trace.total_tokens > 0 else 1 -%}
+{%- set total_dur   = trace.duration_ms  if trace.duration_ms  > 0 else 0 -%}
+{%- set use_ts      = (total_dur > 0) -%}
+{%- set ts_origin   = trace.tree.started_at if (use_ts and trace.tree.started_at) else 0 -%}
+
+<div class="card wf-card">
+  {# ── Legend ────────────────────────────────────────────────────── #}
+  <div class="card__h" style="flex-wrap: wrap; gap: 8px;">
+    <h3 style="margin: 0;">Waterfall</h3>
+    <span class="meta">
+      {%- if use_ts -%}duration ∝ time{%- else -%}width ∝ tokens (no timestamps){%- endif -%}
+    </span>
+    <span class="spacer"></span>
+    <span class="wf-legend">
+      {% for kind, color in KIND_COLORS.items() %}
+      <span class="wf-legend-item">
+        <i class="wf-dot" style="background: {{ color }};"></i>{{ kind }}
+      </span>
+      {% endfor %}
+      <span class="wf-legend-item">
+        <i class="wf-dot" style="background: {{ LOOP_COLOR }};"></i>loop
+      </span>
+    </span>
+  </div>
+
+  {# ── Rows ──────────────────────────────────────────────────────── #}
+  <div class="card__body card__body--flush wf-body">
+    <div class="wf-header">
+      <span class="wf-label-col">span</span>
+      <div class="wf-track-col">
+        <span style="left: 0%;">0%</span>
+        <span style="left: 50%; transform: translateX(-50%);">50%</span>
+        <span style="right: 0%;">100%</span>
+      </div>
+      <span class="wf-cost-col">cost</span>
+    </div>
+    {{ _span_rows(trace.tree, 0, 0, total_toks, total_dur, use_ts, ts_origin) }}
+  </div>
+</div>
+{% endmacro %}
