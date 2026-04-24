@@ -30,10 +30,15 @@ def init_db(conn: sqlite3.Connection) -> None:
             input_tokens  INTEGER DEFAULT 0,
             output_tokens INTEGER DEFAULT 0,
             cost_usd      REAL    DEFAULT 0.0,
-            started_at    INTEGER DEFAULT 0  -- epoch ms
+            started_at    INTEGER DEFAULT 0,  -- epoch ms
+            is_outlier    INTEGER DEFAULT 0   -- 1 if flagged by 2-sigma sweep
         );
 
         CREATE INDEX IF NOT EXISTS idx_spans_kind ON spans(kind);
         CREATE INDEX IF NOT EXISTS idx_spans_name ON spans(name);
     """)
+    # Migration: add is_outlier to existing databases that lack it
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(spans)")}
+    if "is_outlier" not in cols:
+        conn.execute("ALTER TABLE spans ADD COLUMN is_outlier INTEGER DEFAULT 0")
     conn.commit()
