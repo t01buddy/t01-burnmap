@@ -1,0 +1,160 @@
+{# onboarding.html — first-run onboarding: adapter checklist + backfill progress #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Setup — burnmap</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f7f8fa;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.08);
+      padding: 40px 48px;
+      width: 100%;
+      max-width: 520px;
+    }
+    .logo { font-size: 22px; font-weight: 700; color: #e65c00; margin-bottom: 6px; }
+    .tagline { font-size: 13px; color: #888; margin-bottom: 32px; }
+    h2 { font-size: 16px; font-weight: 600; margin: 0 0 16px; }
+
+    /* Adapter list */
+    .adapter-list { list-style: none; margin: 0 0 28px; padding: 0; }
+    .adapter-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 13px;
+    }
+    .adapter-item:last-child { border-bottom: none; }
+    .adapter-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    .dot-found { background: #27ae60; }
+    .dot-missing { background: #ccc; }
+    .adapter-name { font-weight: 600; flex: 1; }
+    .adapter-path { font-size: 11px; color: #888; font-family: monospace; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .badge-found { font-size: 10px; background: #e8f8ef; color: #27ae60; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
+    .badge-missing { font-size: 10px; background: #f5f5f5; color: #999; padding: 2px 6px; border-radius: 3px; }
+
+    /* Progress bar */
+    .progress-section { margin-bottom: 28px; }
+    .progress-header { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
+    .progress-track { background: #f0f0f0; border-radius: 6px; height: 10px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #e65c00; border-radius: 6px; transition: width .4s ease; }
+    .progress-meta { font-size: 11px; color: #888; margin-top: 6px; }
+
+    /* CTA */
+    .cta-btn {
+      display: block; width: 100%; padding: 12px;
+      background: #e65c00; color: #fff;
+      border: none; border-radius: 6px;
+      font-size: 15px; font-weight: 600; cursor: pointer;
+      text-align: center; text-decoration: none;
+      transition: background .15s;
+    }
+    .cta-btn:hover { background: #c44e00; }
+    .cta-btn:disabled { background: #ccc; cursor: not-allowed; }
+    .skip-link { display: block; text-align: center; margin-top: 12px; font-size: 12px; color: #aaa; cursor: pointer; }
+    .skip-link:hover { color: #666; }
+
+    .loading-msg { text-align: center; color: #aaa; font-size: 13px; padding: 20px 0; }
+  </style>
+</head>
+<body>
+<div x-data="onboardingPage()" x-init="load()" class="card">
+
+  <div class="logo">burnmap</div>
+  <div class="tagline">Local-first AI coding agent token dashboard</div>
+
+  <template x-if="loading">
+    <div class="loading-msg">Detecting adapters…</div>
+  </template>
+
+  <template x-if="!loading">
+    <div>
+      <h2>Adapters found</h2>
+      <ul class="adapter-list">
+        <template x-for="a in adapters" :key="a.agent">
+          <li class="adapter-item">
+            <span class="adapter-dot" :class="a.found ? 'dot-found' : 'dot-missing'"></span>
+            <span class="adapter-name" x-text="a.agent.replace('_', ' ')"></span>
+            <span x-show="a.found" class="badge-found">found</span>
+            <span x-show="!a.found" class="badge-missing">not found</span>
+            <span x-show="a.path" class="adapter-path" x-text="a.path"></span>
+          </li>
+        </template>
+      </ul>
+
+      <div class="progress-section">
+        <div class="progress-header">
+          <span>Backfill progress</span>
+          <span x-text="progress.percent_complete + '%'"></span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" :style="'width:' + progress.percent_complete + '%'"></div>
+        </div>
+        <div class="progress-meta">
+          <span x-text="progress.sessions_ingested + ' sessions'"></span>
+          &nbsp;·&nbsp;
+          <span x-text="progress.spans_ingested + ' spans'"></span>
+          <template x-if="progress.log_files_found > 0">
+            <span x-text="' · ' + progress.log_files_found + ' log files found'"></span>
+          </template>
+        </div>
+      </div>
+
+      <button class="cta-btn"
+              @click="openDashboard()"
+              :disabled="adapters.filter(a => a.found).length === 0">
+        Open dashboard
+      </button>
+      <span class="skip-link" @click="openDashboard()">Skip setup</span>
+    </div>
+  </template>
+
+</div>
+
+<script>
+function onboardingPage() {
+  return {
+    loading: true,
+    adapters: [],
+    progress: { percent_complete: 0, sessions_ingested: 0, spans_ingested: 0, log_files_found: 0 },
+
+    async load() {
+      this.loading = true;
+      try {
+        const [adapterRes, progressRes] = await Promise.all([
+          fetch('/api/onboarding/adapters'),
+          fetch('/api/onboarding/backfill'),
+        ]);
+        const aData = await adapterRes.json();
+        const pData = await progressRes.json();
+        this.adapters = aData.adapters || [];
+        this.progress = pData;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    openDashboard() {
+      window.location.href = '/';
+    },
+  };
+}
+</script>
+</body>
+</html>
