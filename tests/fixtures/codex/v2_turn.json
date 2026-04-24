@@ -1,0 +1,12 @@
+{
+  "id": "codex-turn-v2-001",
+  "session_id": "codex-session-bbb",
+  "model": "gpt-4o-mini",
+  "created_at": "2025-01-20T14:00:00Z",
+  "usage": {
+    "prompt_tokens": 900,
+    "completion_tokens": 210,
+    "cached_tokens": 400
+  },
+  "prompt": "Explain async/await in Python."
+}
