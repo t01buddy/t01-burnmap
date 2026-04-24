@@ -34,7 +34,8 @@ _SCHEMA_SQL = """
         run_count     INTEGER DEFAULT 1,
         total_tokens  INTEGER DEFAULT 0,
         total_cost    REAL    DEFAULT 0.0,
-        content_mode  TEXT    DEFAULT 'hash'  -- 'hash' | 'excerpt' | 'full'
+        agents        TEXT    DEFAULT '',   -- pipe-separated agent names
+        projects      TEXT    DEFAULT ''    -- pipe-separated project names
     );
 
     CREATE TABLE IF NOT EXISTS prompt_runs (
@@ -134,6 +135,13 @@ def init_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE spans ADD COLUMN ended_at INTEGER DEFAULT 0")
     if "is_outlier" not in cols:
         conn.execute("ALTER TABLE spans ADD COLUMN is_outlier INTEGER DEFAULT 0")
+    # Additive migration: agents/projects columns on prompts (for upgraded DBs)
+    prompt_cols = {row[1] for row in conn.execute("PRAGMA table_info(prompts)")}
+    if "agents" not in prompt_cols:
+        conn.execute("ALTER TABLE prompts ADD COLUMN agents TEXT DEFAULT ''")
+    if "projects" not in prompt_cols:
+        conn.execute("ALTER TABLE prompts ADD COLUMN projects TEXT DEFAULT ''")
+    # Remove legacy content_mode column if present (was per-row, now global)
     conn.commit()
 
 

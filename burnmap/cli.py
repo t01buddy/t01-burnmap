@@ -17,12 +17,15 @@ def main() -> None:
         print("  sync-pricing  Refresh pricing.yaml from LiteLLM upstream")
         print("  token         Manage auth tokens (--create)")
         print("  serve         Start the FastAPI server (--host, --port, --reload)")
+        print("  content       Manage prompt content (wipe)")
         return
 
     if args[0] == "token":
         _cmd_token(args[1:])
     elif args[0] == "serve":
         _cmd_serve(args[1:])
+    elif args[0] == "content":
+        _cmd_content(args[1:])
     elif args[0] == "sweep":
         conn = get_db()
         init_db(conn)
@@ -50,6 +53,25 @@ def _cmd_token(args: list[str]) -> None:
             print(f"[burnmap token] token exists (use --create to rotate)")
         else:
             print("[burnmap token] no token set. Use --create to generate one.")
+
+
+def _cmd_content(args: list[str]) -> None:
+    if not args or args[0] in ("-h", "--help"):
+        print("Usage: burnmap content <subcommand>")
+        print("Subcommands:")
+        print("  wipe   Delete all stored prompt_content rows")
+        return
+    if args[0] == "wipe":
+        from burnmap.db.schema import get_content_db, init_content_db
+        from burnmap.fingerprint import wipe_content
+        cconn = get_content_db()
+        init_content_db(cconn)
+        deleted = wipe_content(cconn)
+        cconn.close()
+        print(f"[burnmap content wipe] deleted={deleted}")
+    else:
+        print(f"Unknown content subcommand: {args[0]}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _cmd_serve(args: list[str]) -> None:
