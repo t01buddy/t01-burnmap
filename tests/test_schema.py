@@ -56,7 +56,7 @@ class TestCoreTables:
         assert row["input_tokens"] == 10
 
     def test_prompts_crud(self, conn):
-        conn.execute("INSERT INTO prompts VALUES ('fp1', 1000, 2000, 3, 500, 0.05, 'hash')")
+        conn.execute("INSERT INTO prompts (fingerprint, first_seen, last_seen, run_count, total_tokens, total_cost) VALUES ('fp1', 1000, 2000, 3, 500, 0.05)")
         conn.commit()
         row = conn.execute("SELECT * FROM prompts WHERE fingerprint='fp1'").fetchone()
         assert row["run_count"] == 3
