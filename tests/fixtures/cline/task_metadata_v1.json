@@ -1,0 +1,12 @@
+{
+  "id": "cline-task-001",
+  "ulid": "01JNZXABCDEF",
+  "ts": 1704067200000,
+  "task": "Implement login page",
+  "tokensIn": 2500,
+  "tokensOut": 480,
+  "cacheWrites": 200,
+  "cacheReads": 100,
+  "totalCost": 0.045,
+  "modelId": "claude-3-5-sonnet-20241022"
+}

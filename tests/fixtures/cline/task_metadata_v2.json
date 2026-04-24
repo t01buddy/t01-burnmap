@@ -1,0 +1,9 @@
+{
+  "id": "cline-task-002",
+  "ts": 1706745600000,
+  "task": "Fix authentication bug",
+  "tokensIn": 900,
+  "tokensOut": 210,
+  "totalCost": 0.012,
+  "modelId": "claude-3-haiku-20240307"
+}
