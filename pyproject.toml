@@ -7,10 +7,10 @@ name = "t01-burnmap"
 version = "0.1.0"
 description = "Local-first AI coding agent token usage dashboard"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["jinja2>=3.1"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio"]
+dev = ["pytest>=8", "pytest-asyncio", "jinja2>=3.1"]
 
 [project.scripts]
 burnmap = "burnmap.cli:main"
