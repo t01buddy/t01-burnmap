@@ -1,0 +1,251 @@
+{# settings.html — Settings page: content mode, providers, pricing, alert thresholds, storage #}
+{% extends "base.html" %}
+
+{% block title %}Settings — burnmap{% endblock %}
+
+{% block content %}
+<div x-data="settingsPage()" x-init="load()">
+
+  <div class="page-header">
+    <h1 class="page-title">Settings</h1>
+    <span class="meta">local · no network</span>
+  </div>
+
+  <template x-if="loading">
+    <div class="loading-row">Loading…</div>
+  </template>
+
+  <template x-if="!loading">
+    <div>
+
+      <!-- Content mode -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card__h">
+          <h3>Content mode</h3>
+          <span class="meta">determines whether prompt text is stored</span>
+        </div>
+        <div class="card__body">
+          <p class="ink2" style="margin:0 0 12px">
+            Four modes. Switching to a lower mode does not delete stored content — run
+            <span class="mono">content wipe</span> for that.
+          </p>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+            <template x-for="mode in contentModes" :key="mode.key">
+              <label
+                :style="selectedMode === mode.key
+                  ? 'border:1.5px solid var(--ink);border-radius:5px;padding:12px;cursor:pointer;background:var(--paper-2)'
+                  : 'border:1px solid var(--rule-soft);border-radius:5px;padding:12px;cursor:pointer;background:var(--paper)'"
+                @click="selectedMode = mode.key">
+                <div class="mono" style="font-size:11.5px;margin-bottom:4px" x-text="mode.key"></div>
+                <div class="ink2" style="font-size:11.5px" x-text="mode.desc"></div>
+              </label>
+            </template>
+          </div>
+          <div class="row" style="margin-top:14px;gap:8px">
+            <button class="btn btn--primary" @click="applyMode()">Apply</button>
+            <button class="btn btn--danger" @click="wipeContent()">Wipe stored content</button>
+            <span class="spacer"></span>
+            <span class="mono muted" style="font-size:11px"
+              x-text="storage ? 'currently storing ' + storage.row_counts.prompts + ' prompts · ' + storage.size_kb + ' KB' : ''">
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Providers -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card__h">
+          <h3>Providers</h3>
+          <span class="meta">agent adapters</span>
+        </div>
+        <div class="card__body card__body--flush">
+          <table class="t">
+            <thead><tr>
+              <th>Provider</th>
+              <th>Status</th>
+              <th>Path</th>
+              <th class="right">Sessions</th>
+              <th></th>
+            </tr></thead>
+            <tbody>
+              <template x-for="p in providers" :key="p.agent">
+                <tr style="cursor:pointer" @click="window.location='/settings/provider/' + p.agent">
+                  <td>
+                    <span class="agent-badge" :class="'agent-badge--' + p.agent" x-text="p.agent.replace(/_/g,' ')"></span>
+                  </td>
+                  <td>
+                    <template x-if="p.found">
+                      <span class="chip chip--active">active</span>
+                    </template>
+                    <template x-if="!p.found">
+                      <span class="chip chip--muted">not found</span>
+                    </template>
+                  </td>
+                  <td class="mono muted" style="font-size:11px" x-text="p.path || '—'"></td>
+                  <td class="num right" x-text="p.sessions"></td>
+                  <td class="right">
+                    <span class="is-accent mono" style="font-size:11px">details →</span>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Pricing -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card__h">
+          <h3>Pricing</h3>
+          <span class="meta">effective-dated</span>
+        </div>
+        <div class="card__body">
+          <div class="row">
+            <span>Source: <b class="mono">LiteLLM model_prices_and_context_window.json</b></span>
+            <span class="spacer"></span>
+            <span class="mono muted" style="font-size:11px"
+              x-text="pricing ? 'last synced · ' + (pricing.last_synced || 'never') + ' · ' + pricing.model_count + ' models' : ''">
+            </span>
+          </div>
+          <div class="row" style="margin-top:12px;gap:8px">
+            <button class="btn btn--primary" @click="syncPricing()">Sync pricing</button>
+            <span class="spacer"></span>
+            <span class="chip">subscription runs labelled <b style="margin-left:3px">synthetic</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alert thresholds -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card__h">
+          <h3>Alert thresholds</h3>
+          <span class="meta">stuck-loop detection</span>
+        </div>
+        <div class="card__body">
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:10px 14px;font-size:12px;align-items:center">
+            <span class="mono muted">IDENTICAL TOOL COUNT</span>
+            <div class="row" style="gap:8px">
+              <input type="number" x-model="thresholds.tool_count" min="1" max="100"
+                style="width:60px;padding:5px 8px;border:1px solid var(--rule);border-radius:3px;font-family:var(--font-mono);font-size:12px"/>
+              <span class="mono muted" style="font-size:11px">consecutive identical tools before flagging</span>
+            </div>
+            <span class="mono muted">COST TREND</span>
+            <div>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" x-model="thresholds.cost_trend" style="width:14px;height:14px"/>
+                <span>Flag when cost-per-iteration is trending upward</span>
+              </label>
+            </div>
+            <span class="mono muted">SIGMA THRESHOLD</span>
+            <div class="row" style="gap:8px">
+              <input type="number" x-model="thresholds.sigma" step="0.5" min="0.5"
+                style="width:60px;padding:5px 8px;border:1px solid var(--rule);border-radius:3px;font-family:var(--font-mono);font-size:12px"/>
+              <span class="mono muted" style="font-size:11px">standard deviations for outlier flagging</span>
+            </div>
+          </div>
+          <div class="row" style="margin-top:14px;gap:8px">
+            <button class="btn btn--primary" @click="saveThresholds()">Save</button>
+            <span class="mono muted" style="font-size:11px">thresholds apply to all future traces</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Storage -->
+      <div class="card">
+        <div class="card__h"><h3>Storage</h3></div>
+        <div class="card__body"
+          style="display:grid;grid-template-columns:auto 1fr;gap:8px 14px;font-size:12px">
+          <template x-if="storage">
+            <template x-for="row in storageRows()" :key="row.label">
+              <template x-if="true">
+                <span class="mono muted" x-text="row.label"></span>
+              </template>
+            </template>
+          </template>
+          <template x-if="storage">
+            <span class="mono" x-text="storage.path"></span>
+          </template>
+          <span class="mono muted">SIZE</span>
+          <span class="mono" x-text="storage ? storage.size_kb + ' KB' : '—'"></span>
+          <span class="mono muted">SESSIONS</span>
+          <span class="mono" x-text="storage ? storage.row_counts.sessions : '—'"></span>
+          <span class="mono muted">SPANS</span>
+          <span class="mono" x-text="storage ? storage.row_counts.spans : '—'"></span>
+          <span class="mono muted">PROMPTS</span>
+          <span class="mono" x-text="storage ? storage.row_counts.prompts : '—'"></span>
+        </div>
+      </div>
+
+    </div>
+  </template>
+
+</div>
+
+<script>
+function settingsPage() {
+  return {
+    loading: true,
+    storage: null,
+    providers: [],
+    pricing: null,
+    selectedMode: 'preview',
+    thresholds: { tool_count: 20, cost_trend: true, sigma: 2 },
+    contentModes: [
+      { key: 'off', desc: 'Fingerprints disabled. Pure totals only.' },
+      { key: 'fingerprint_only', desc: 'SHA-256 hashes only. No text.' },
+      { key: 'preview', desc: 'First 160 chars + fingerprint.' },
+      { key: 'full', desc: 'Full prompt text stored locally.' },
+    ],
+
+    async load() {
+      this.loading = true;
+      const [stor, prov, price] = await Promise.all([
+        fetch('/api/settings/storage').then(r => r.json()),
+        fetch('/api/settings/providers').then(r => r.json()),
+        fetch('/api/settings/pricing').then(r => r.json()),
+      ]);
+      this.storage = stor;
+      this.providers = prov.providers || [];
+      this.pricing = price;
+      this.loading = false;
+    },
+
+    storageRows() {
+      if (!this.storage) return [];
+      return [{ label: 'PATH', value: this.storage.path }];
+    },
+
+    applyMode() {
+      // POST to /api/settings/content-mode when backend endpoint exists
+      console.log('apply content mode:', this.selectedMode);
+    },
+
+    wipeContent() {
+      if (!confirm('Wipe all stored prompt content? This cannot be undone.')) return;
+      console.log('wipe content');
+    },
+
+    async syncPricing() {
+      const btn = event.target;
+      btn.disabled = true;
+      btn.textContent = 'Syncing…';
+      try {
+        const r = await fetch('/api/settings/sync-pricing', { method: 'POST' });
+        if (r.ok) {
+          await this.load();
+          btn.textContent = 'Sync pricing';
+        } else {
+          btn.textContent = 'Error — retry';
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    },
+
+    saveThresholds() {
+      console.log('save thresholds:', this.thresholds);
+    },
+  };
+}
+</script>
+{% endblock %}

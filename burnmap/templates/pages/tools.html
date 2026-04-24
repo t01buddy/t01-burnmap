@@ -1,0 +1,92 @@
+{# tools.html — per-tool cost/calls/avg table with share bars #}
+{% extends "base.html" %}
+
+{% block title %}Tools — burnmap{% endblock %}
+
+{% block content %}
+<div x-data="toolsPage()" x-init="load()">
+
+  <div class="page-header">
+    <h1 class="page-title">Tools</h1>
+    <span class="meta" style="font-size:12px;color:var(--ink-3)">aggregate across all traces</span>
+  </div>
+
+  <template x-if="loading">
+    <div class="loading-row">Loading…</div>
+  </template>
+
+  <template x-if="!loading && rows.length === 0">
+    <div class="loading-row">No tool spans found.</div>
+  </template>
+
+  <template x-if="!loading && rows.length > 0">
+    <div class="card">
+      <table class="t">
+        <thead>
+          <tr>
+            <th>Tool</th>
+            <th class="right">Calls</th>
+            <th class="right">Total tokens</th>
+            <th class="right">Avg / call</th>
+            <th class="right">Total cost</th>
+            <th>Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="t in rows" :key="t.name">
+            <tr>
+              <td><b class="mono" x-text="t.name"></b></td>
+              <td class="num right" x-text="t.calls.toLocaleString()"></td>
+              <td class="num right" x-text="fmtTok(t.total_input_tokens + t.total_output_tokens)"></td>
+              <td class="num right" x-text="Math.round(t.avg_tokens_per_call).toLocaleString()"></td>
+              <td class="num right mono" x-text="'$' + (t.total_cost_usd || 0).toFixed(4)"></td>
+              <td style="min-width:120px">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div style="flex:1;height:6px;background:var(--rule-soft);border-radius:3px;overflow:hidden">
+                    <div :style="'height:100%;border-radius:3px;background:var(--accent);width:' + (t.cost_share * 100).toFixed(1) + '%'"></div>
+                  </div>
+                  <span class="mono muted" style="font-size:11px;min-width:36px" x-text="(t.cost_share * 100).toFixed(0) + '%'"></span>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </template>
+
+</div>
+
+<style>
+.page-header { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+.page-title  { font-size:20px; font-weight:600; }
+.loading-row { padding:40px; text-align:center; color:var(--ink-3,#888); font-size:14px; }
+</style>
+
+<script>
+function toolsPage() {
+  return {
+    rows: [],
+    loading: false,
+
+    async load() {
+      this.loading = true;
+      try {
+        const r = await fetch('/api/tools?limit=200');
+        const d = await r.json();
+        this.rows = d.tools || [];
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    fmtTok(n) {
+      if (!n) return '0';
+      if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+      if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+      return String(n);
+    },
+  };
+}
+</script>
+{% endblock %}
