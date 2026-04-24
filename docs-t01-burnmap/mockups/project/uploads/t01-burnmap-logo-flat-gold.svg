@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="t01-burnmap">
+  <title>t01-burnmap</title>
+  <path d="M11 10 L18.794 14.5 L18.794 23.5 L11 28 L3.206 23.5 L3.206 14.5 Z" fill="none" stroke="#F0B90B" stroke-width="2.5" stroke-linejoin="round"></path>
+  <path d="M7 16 L15 16 L15 18 L12.5 18 L12.5 23.5 L9.5 23.5 L9.5 18 L7 18 Z" fill="#F0B90B"></path>
+  <path fill-rule="evenodd" fill="#F0B90B" d="M23.124 7 L27.454 9.5 L27.454 14.5 L23.124 17 L18.794 14.5 L18.794 9.5 Z&#xA;           M22.324 9 L23.924 9 L23.924 15 L22.324 15 Z"></path>
+</svg>
