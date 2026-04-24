@@ -28,6 +28,8 @@ def _seed(conn: sqlite3.Connection) -> None:
         ("s5", "sess-c", "claude_code", "skill",   "battle-qa",   900, 250, 0.015, 1_700_000_004_000),
         # "tool" kind — should NOT appear in tasks results
         ("s6", "sess-c", "claude_code", "tool",    "Read",         0,   0, 0.0,   1_700_000_005_000),
+        # different agent
+        ("s7", "sess-d", "codex",       "slash",   "/commit",     400, 100, 0.006, 1_700_000_006_000),
     ]
     conn.executemany(
         "INSERT INTO spans (id, session_id, agent, kind, name, input_tokens, output_tokens, cost_usd, started_at) VALUES (?,?,?,?,?,?,?,?,?)", rows
@@ -45,29 +47,30 @@ class TestQueryTasks:
     def test_aggregates_calls(self, db):
         rows = query_tasks(db)
         commit_row = next(r for r in rows if r["name"] == "/commit")
-        assert commit_row["calls"] == 2
+        # s1, s2 (claude_code) + s7 (codex) = 3 calls
+        assert commit_row["calls"] == 3
 
     def test_token_sums(self, db):
         rows = query_tasks(db)
         commit_row = next(r for r in rows if r["name"] == "/commit")
-        assert commit_row["total_input_tokens"] == 1400
-        assert commit_row["total_output_tokens"] == 350
+        assert commit_row["total_input_tokens"] == 1800
+        assert commit_row["total_output_tokens"] == 450
 
     def test_avg_tokens_per_call(self, db):
         rows = query_tasks(db)
         commit_row = next(r for r in rows if r["name"] == "/commit")
-        # (800+200+600+150) / 2 = 875
-        assert commit_row["avg_tokens_per_call"] == pytest.approx(875.0)
+        # (800+200+600+150+400+100) / 3 = 750
+        assert commit_row["avg_tokens_per_call"] == pytest.approx(750.0)
 
     def test_cost_sum(self, db):
         rows = query_tasks(db)
         commit_row = next(r for r in rows if r["name"] == "/commit")
-        assert commit_row["total_cost_usd"] == pytest.approx(0.021)
+        assert commit_row["total_cost_usd"] == pytest.approx(0.027)
 
     def test_last_seen_ms(self, db):
         rows = query_tasks(db)
         commit_row = next(r for r in rows if r["name"] == "/commit")
-        assert commit_row["last_seen_ms"] == 1_700_000_001_000
+        assert commit_row["last_seen_ms"] == 1_700_000_006_000
 
     def test_ordered_by_cost_desc(self, db):
         rows = query_tasks(db)
@@ -98,6 +101,15 @@ class TestQueryTasks:
     def test_limit_respected(self, db):
         rows = query_tasks(db, limit=1)
         assert len(rows) == 1
+
+    def test_agent_filter(self, db):
+        rows = query_tasks(db, agent="codex")
+        assert len(rows) == 1
+        assert rows[0]["name"] == "/commit"
+
+    def test_agent_filter_no_match(self, db):
+        rows = query_tasks(db, agent="unknown_agent")
+        assert rows == []
 
     def test_empty_db(self, db):
         """Empty spans table returns empty list, not an error."""
