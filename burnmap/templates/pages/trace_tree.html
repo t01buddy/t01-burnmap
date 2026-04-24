@@ -1,0 +1,77 @@
+{# trace_tree.html — Trace tree page with flame / indented / waterfall tabs
+   Props (passed via template context):
+     trace  — trace object with .id, .label, .total_tokens, .total_cost,
+               .duration_ms (may be 0), .turns, .tools, .tree (nested spans)
+   Each span node:
+     .id, .label, .kind, .tokens, .cost, .loop, .children (list),
+     .started_at (ms epoch, optional), .ended_at (ms epoch, optional)
+#}
+{% from "components/waterfall.html" import waterfall_tab %}
+
+<div class="page" style="max-width: none;" x-data="traceTreePage()" x-init="init()">
+
+  {# ── Trace header ─────────────────────────────────────────────── #}
+  <div class="row" style="margin-bottom: 6px; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3);">
+    <a href="/traces" class="btn btn--ghost">← back</a>
+    <span>trace <b style="color: var(--ink);">{{ trace.id }}</b></span>
+    <span class="spacer"></span>
+    <span>{{ trace.total_tokens | int | format_tok }} tokens</span>
+    <span>·</span>
+    <span>{{ trace.total_cost | format_cost }}</span>
+  </div>
+
+  <div class="card" style="margin-bottom: 14px;">
+    <div class="card__body" style="padding: 12px 16px;">
+      <div style="font-size: 15px; font-family: var(--font-mono);">"{{ trace.label }}"</div>
+      <div class="row" style="margin-top: 8px; gap: 16px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);">
+        <span>turns <b style="color: var(--ink);">{{ trace.turns }}</b></span>
+        <span>tools <b style="color: var(--ink);">{{ trace.tools }}</b></span>
+      </div>
+    </div>
+  </div>
+
+  {# ── Tab bar ──────────────────────────────────────────────────── #}
+  <div class="row" style="margin-bottom: 10px; gap: 4px; border-bottom: 1px solid var(--rule-soft);">
+    {% for tab_name in ["flame", "indented", "waterfall"] %}
+    <button class="btn btn--ghost"
+      style="border-radius: 0; padding: 8px 14px;"
+      :style="tab === '{{ tab_name }}' ? 'border-bottom: 2px solid var(--ink);' : 'border-bottom: 2px solid transparent;'"
+      @click="tab = '{{ tab_name }}'">{{ tab_name }}</button>
+    {% endfor %}
+    <span class="spacer"></span>
+  </div>
+
+  {# ── Flame tab ────────────────────────────────────────────────── #}
+  <div x-show="tab === 'flame'" class="card">
+    <div class="card__body card__body--flush" style="padding: 6px;">
+      <div class="icicle-placeholder" style="height: 160px; display: flex; align-items: center;
+           justify-content: center; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px;">
+        [icicle / flame graph]
+      </div>
+    </div>
+  </div>
+
+  {# ── Indented tab ─────────────────────────────────────────────── #}
+  <div x-show="tab === 'indented'" class="card">
+    <div class="card__body">
+      <div class="indented-placeholder" style="color: var(--ink-3); font-family: var(--font-mono); font-size: 11px;">
+        [indented tree]
+      </div>
+    </div>
+  </div>
+
+  {# ── Waterfall tab ────────────────────────────────────────────── #}
+  <div x-show="tab === 'waterfall'">
+    {{ waterfall_tab(trace) }}
+  </div>
+
+</div>
+
+<script>
+function traceTreePage() {
+  return {
+    tab: "flame",
+    init() {},
+  };
+}
+</script>
