@@ -1,0 +1,141 @@
+{# tasks.html — slash commands / skills / subagents breakdown with kind summary cards + table #}
+{% extends "base.html" %}
+
+{% block title %}Tasks — burnmap{% endblock %}
+
+{% block content %}
+<div x-data="tasksPage()" x-init="load()">
+
+  <div class="page-header">
+    <h1 class="page-title">Tasks</h1>
+    <span class="meta" style="font-size:12px;color:var(--ink-3)">slash commands · skills · subagents</span>
+  </div>
+
+  <template x-if="loading">
+    <div class="loading-row">Loading…</div>
+  </template>
+
+  <template x-if="!loading">
+    <div>
+
+      <!-- Kind summary cards -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+        <template x-for="k in kinds" :key="k.key">
+          <div class="card" style="cursor:pointer"
+               :style="filter === k.key ? 'outline:2px solid var(--accent)' : ''"
+               @click="toggleFilter(k.key)">
+            <div class="card__h">
+              <span class="mono" style="font-size:12px" x-text="k.key"></span>
+              <span class="spacer"></span>
+              <span class="mono muted" style="font-size:11px" x-text="kindRows(k.key).length + ' names'"></span>
+            </div>
+            <div class="card__body">
+              <div class="row" style="align-items:baseline;gap:8px">
+                <span class="num" style="font-size:26px" x-text="kindCalls(k.key).toLocaleString()"></span>
+                <span class="muted mono" style="font-size:11px">calls</span>
+              </div>
+              <div class="mono muted" style="font-size:11px;margin-top:4px"
+                   x-text="'$' + kindCost(k.key).toFixed(4) + ' total'"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Table -->
+      <div class="card">
+        <div class="card__h">
+          <span class="mono" style="font-size:12px"
+                x-text="filter ? filter : 'all kinds'"></span>
+          <span class="spacer"></span>
+          <span class="muted mono" style="font-size:11px" x-text="filteredRows.length + ' rows'"></span>
+        </div>
+        <table class="t">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Kind</th>
+              <th class="right">Calls</th>
+              <th class="right">Avg tokens</th>
+              <th class="right">Total cost</th>
+              <th>Last seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="t in filteredRows" :key="t.name + t.kind">
+              <tr>
+                <td><b class="mono" x-text="t.name"></b></td>
+                <td>
+                  <span class="chip"
+                        :class="'chip--' + t.kind"
+                        x-text="t.kind"></span>
+                </td>
+                <td class="num right" x-text="t.calls.toLocaleString()"></td>
+                <td class="num right" x-text="Math.round(t.avg_tokens_per_call).toLocaleString()"></td>
+                <td class="num right mono" x-text="'$' + (t.total_cost_usd || 0).toFixed(4)"></td>
+                <td class="mono muted" style="font-size:11px" x-text="fmtTime(t.last_seen_ms)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </template>
+
+</div>
+
+<style>
+.page-header { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+.page-title  { font-size:20px; font-weight:600; }
+.loading-row { padding:40px; text-align:center; color:var(--ink-3,#888); font-size:14px; }
+.chip { display:inline-block; padding:1px 7px; border-radius:4px; font-size:11px; font-family:var(--font-mono); }
+.chip--slash   { background:#fef9c3; color:#713f12; }
+.chip--skill   { background:#fef3c7; color:#78350f; }
+.chip--subagent { background:#ede9fe; color:#4c1d95; }
+</style>
+
+<script>
+function tasksPage() {
+  return {
+    rows: [],
+    loading: false,
+    filter: null,
+    kinds: [
+      { key: 'slash' },
+      { key: 'skill' },
+      { key: 'subagent' },
+    ],
+
+    get filteredRows() {
+      if (!this.filter) return this.rows;
+      return this.rows.filter(r => r.kind === this.filter);
+    },
+
+    kindRows(k) { return this.rows.filter(r => r.kind === k); },
+    kindCalls(k) { return this.kindRows(k).reduce((s, r) => s + r.calls, 0); },
+    kindCost(k)  { return this.kindRows(k).reduce((s, r) => s + (r.total_cost_usd || 0), 0); },
+
+    toggleFilter(k) { this.filter = this.filter === k ? null : k; },
+
+    async load() {
+      this.loading = true;
+      try {
+        const r = await fetch('/api/tasks?limit=500');
+        const d = await r.json();
+        this.rows = d.tasks || [];
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    fmtTime(ms) {
+      if (!ms) return '—';
+      return new Date(ms).toLocaleString(undefined, {
+        month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    },
+  };
+}
+</script>
+{% endblock %}
