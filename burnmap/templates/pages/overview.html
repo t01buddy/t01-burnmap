@@ -1,0 +1,324 @@
+{# overview.html — Overview page: headline stats, hourly burn chart, model mix, agent breakdown, billing split, quota mini-panels #}
+{% extends "base.html" %}
+
+{% block title %}Overview — burnmap{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div x-data="overviewPage()" x-init="load()">
+
+  <div class="page-header">
+    <h1 class="page-title">Overview</h1>
+    <span class="meta" style="font-size:12px;color:var(--ink-3)" x-text="greeting + ' · today'">Today</span>
+  </div>
+
+  <template x-if="loading">
+    <div class="loading-row">Loading…</div>
+  </template>
+
+  <template x-if="!loading">
+    <div>
+
+      <!-- Stat strip — 6 metrics -->
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px">
+
+        <!-- Tokens today -->
+        <div class="card">
+          <div class="card__h"><span class="mono muted" style="font-size:10px;letter-spacing:.06em">TOKENS · TODAY</span></div>
+          <div class="card__body">
+            <div class="num" style="font-size:20px" x-text="fmtTok(d.today.tokens)"></div>
+            <div class="mono muted" style="font-size:11px;margin-top:2px">tokens burned</div>
+          </div>
+        </div>
+
+        <!-- Cost today -->
+        <div class="card">
+          <div class="card__h"><span class="mono muted" style="font-size:10px;letter-spacing:.06em">COST · TODAY</span></div>
+          <div class="card__body">
+            <div class="num" style="font-size:20px" x-text="fmtCost(d.today.cost)"></div>
+            <div class="mono muted" style="font-size:11px;margin-top:2px">all agents</div>
+          </div>
+        </div>
+
+        <!-- 5-hour block -->
+        <div class="card">
+          <div class="card__h"><span class="mono muted" style="font-size:10px;letter-spacing:.06em">COST · 5H BLOCK</span></div>
+          <div class="card__body">
+            <div class="num" style="font-size:20px" x-text="fmtCost(d.today.block_cost)"></div>
+            <div style="height:4px;background:var(--rule-soft);border-radius:2px;margin-top:6px">
+              <div :style="'height:100%;border-radius:2px;background:var(--accent);width:' + (d.today.block_pct*100).toFixed(1) + '%'"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Week -->
+        <div class="card">
+          <div class="card__h"><span class="mono muted" style="font-size:10px;letter-spacing:.06em">COST · THIS WEEK</span></div>
+          <div class="card__body">
+            <div class="num" style="font-size:20px" x-text="fmtCost(d.today.week_cost)"></div>
+            <div style="height:4px;background:var(--rule-soft);border-radius:2px;margin-top:6px">
+              <div :style="'height:100%;border-radius:2px;background:var(--heat-2);width:' + (d.today.week_pct*100).toFixed(1) + '%'"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Prompts today -->
+        <div class="card">
+          <div class="card__h"><span class="mono muted" style="font-size:10px;letter-spacing:.06em">PROMPTS · TODAY</span></div>
+          <div class="card__body">
+            <div class="num" style="font-size:20px" x-text="(d.today.prompts || 0).toLocaleString()"></div>
+            <div class="mono muted" style="font-size:11px;margin-top:2px">unique prompts</div>
+          </div>
+        </div>
+
+        <!-- Top model -->
+        <div class="card">
+          <div class="card__h"><span class="mono muted" style="font-size:10px;letter-spacing:.06em">TOP MODEL</span></div>
+          <div class="card__body">
+            <div class="mono" style="font-size:12px;font-weight:500" x-text="d.today.top_model || '—'"></div>
+            <div class="mono muted" style="font-size:11px;margin-top:2px" x-text="d.today.top_model_pct || '—'"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Main grid: hourly burn chart + model mix -->
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+
+        <!-- Hourly burn bar chart (Chart.js) -->
+        <div class="card">
+          <div class="card__h">
+            <h3>Token burn · today</h3>
+            <span class="mono muted" style="font-size:11px">hourly · 24h</span>
+          </div>
+          <div class="card__body">
+            <div style="position:relative;height:120px">
+              <canvas id="hourlyChart"></canvas>
+            </div>
+            <div class="row" style="margin-top:8px;font-family:var(--font-mono);font-size:10px;color:var(--ink-3)">
+              <span>00:00</span><span style="flex:1"></span>
+              <span>06:00</span><span style="flex:1"></span>
+              <span>12:00</span><span style="flex:1"></span>
+              <span>18:00</span><span style="flex:1"></span>
+              <span>23:00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Model mix with progress bars -->
+        <div class="card">
+          <div class="card__h">
+            <h3>Model mix</h3>
+            <span class="mono muted" style="font-size:11px">today · by tokens</span>
+          </div>
+          <div class="card__body" style="display:flex;flex-direction:column;gap:12px">
+            <template x-if="d.models.length === 0">
+              <p class="mono muted" style="font-size:12px">No model data today.</p>
+            </template>
+            <template x-for="m in d.models" :key="m.id">
+              <div>
+                <div class="row" style="margin-bottom:4px">
+                  <span class="mono" style="font-size:11px" x-text="m.id"></span>
+                  <span style="flex:1"></span>
+                  <span class="num muted" style="font-size:11px" x-text="fmtTok(m.tokens)"></span>
+                  <span class="num muted" style="font-size:11px;min-width:52px;text-align:right" x-text="fmtCost(m.cost)"></span>
+                </div>
+                <div style="height:5px;background:var(--rule-soft);border-radius:2px">
+                  <div :style="'height:100%;border-radius:2px;background:var(--heat-3);width:' + (m.share*100).toFixed(1) + '%'"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Agent breakdown + billing split -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+        <!-- Agent breakdown card -->
+        <div class="card">
+          <div class="card__h">
+            <h3>Agent breakdown · today</h3>
+            <span class="mono muted" style="font-size:11px">tokens by agent</span>
+          </div>
+          <div class="card__body" style="display:flex;flex-direction:column;gap:10px">
+            <template x-if="d.agent_breakdown.length === 0">
+              <p class="mono muted" style="font-size:12px">No agent data today.</p>
+            </template>
+            <template x-for="a in d.agent_breakdown" :key="a.agent">
+              <div>
+                <div class="row" style="margin-bottom:4px">
+                  <span class="agent-badge" :class="'agent-badge--' + a.agent" x-text="a.agent ? a.agent.replace(/_/g,' ') : '—'"></span>
+                  <span style="flex:1"></span>
+                  <span class="num muted" style="font-size:11px" x-text="fmtTok(a.tokens)"></span>
+                  <span class="num muted" style="font-size:11px;min-width:52px;text-align:right" x-text="fmtCost(a.cost)"></span>
+                  <span class="mono muted" style="font-size:11px;min-width:38px;text-align:right" x-text="fmtPct(a.share)"></span>
+                </div>
+                <div style="height:5px;background:var(--rule-soft);border-radius:2px">
+                  <div :style="'height:100%;border-radius:2px;background:var(--heat-4);width:' + (a.share*100).toFixed(1) + '%'"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Billing split (synthetic/real) -->
+        <div class="card">
+          <div class="card__h">
+            <h3>Billing split</h3>
+            <span class="mono muted" style="font-size:11px">subscription vs API</span>
+          </div>
+          <div class="card__body">
+            <div class="row" style="align-items:baseline;gap:10px;margin-bottom:10px">
+              <span class="chip chip--ghost">subscription</span>
+              <span class="num" style="font-size:18px" x-text="fmtCost(d.billing.subscription)"></span>
+              <span class="mono muted" style="font-size:11px">synthetic · Claude</span>
+            </div>
+            <div class="row" style="align-items:baseline;gap:10px;margin-bottom:10px">
+              <span class="chip chip--ghost">API</span>
+              <span class="num" style="font-size:18px" x-text="fmtCost(d.billing.api)"></span>
+              <span class="mono muted" style="font-size:11px">real · metered</span>
+            </div>
+            <div class="hr" style="margin:10px 0"></div>
+            <div class="mono muted" style="font-size:11px">
+              Subscription costs are synthetic estimates based on effective-dated model rates.
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Quota mini-panels -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+        <!-- 5-hour block quota -->
+        <div class="card">
+          <div class="card__h">
+            <h3>5-hour block</h3>
+            <span style="flex:1"></span>
+            <span class="mono" style="font-size:11px" x-text="(d.today.block_pct*100).toFixed(0) + '% · ' + fmtCost(d.today.block_cost)"></span>
+          </div>
+          <div class="card__body">
+            <div style="height:14px;background:var(--rule-soft);border-radius:3px">
+              <div :style="'height:100%;border-radius:3px;background:' + (d.today.block_pct > 0.8 ? 'var(--alert)' : 'var(--accent)') + ';width:' + (d.today.block_pct*100).toFixed(1) + '%'"></div>
+            </div>
+            <div class="mono muted" style="font-size:10px;margin-top:6px">Max20 · ~$380 per block</div>
+          </div>
+        </div>
+
+        <!-- Weekly quota -->
+        <div class="card">
+          <div class="card__h">
+            <h3>Weekly · Max20</h3>
+            <span style="flex:1"></span>
+            <span class="mono" style="font-size:11px" x-text="(d.today.week_pct*100).toFixed(0) + '% · ' + fmtCost(d.today.week_cost)"></span>
+          </div>
+          <div class="card__body">
+            <div style="height:14px;background:var(--rule-soft);border-radius:3px">
+              <div :style="'height:100%;border-radius:3px;background:' + (d.today.week_pct > 0.8 ? 'var(--alert)' : 'var(--heat-2)') + ';width:' + (d.today.week_pct*100).toFixed(1) + '%'"></div>
+            </div>
+            <div class="mono muted" style="font-size:10px;margin-top:6px">Max20 · ~$3800/week</div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </template>
+
+</div>
+
+<style>
+.page-header { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+.page-title  { font-size:20px; font-weight:600; margin:0; }
+.loading-row { padding:40px; text-align:center; color:var(--ink-3,#888); font-size:14px; }
+.hr          { height:1px; background:var(--rule-soft,#e8e5dc); }
+.chip--ghost { background:var(--paper-2,#f4f2ed); color:var(--ink-2,#4a4843); padding:1px 7px; border-radius:4px; font-size:11px; font-family:var(--font-mono); }
+</style>
+
+<script>
+function overviewPage() {
+  return {
+    loading: true,
+    d: {
+      today: { tokens:0, cost:0, prompts:0, block_cost:0, block_pct:0, week_cost:0, week_pct:0, top_model:'—', top_model_pct:'—' },
+      hourly: Array(24).fill(0),
+      models: [],
+      agent_breakdown: [],
+      billing: { subscription: 0, api: 0 },
+    },
+
+    get greeting() {
+      const h = new Date().getHours();
+      if (h < 12) return 'Good morning';
+      if (h < 18) return 'Good afternoon';
+      return 'Good evening';
+    },
+
+    async load() {
+      this.loading = true;
+      try {
+        const r = await fetch('/api/overview');
+        this.d = await r.json();
+        this.$nextTick(() => this.renderChart());
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    renderChart() {
+      const canvas = document.getElementById('hourlyChart');
+      if (!canvas || typeof Chart === 'undefined') return;
+      const existing = Chart.getChart(canvas);
+      if (existing) existing.destroy();
+      const vals = this.d.hourly || Array(24).fill(0);
+      const max = Math.max(...vals, 1);
+      new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: Array.from({length: 24}, (_, i) => String(i).padStart(2,'0')),
+          datasets: [{
+            data: vals,
+            backgroundColor: vals.map(v =>
+              v >= max * 0.75 ? 'var(--heat-4)' :
+              v >= max * 0.45 ? 'var(--heat-2)' :
+              'var(--heat-1)'
+            ),
+            borderWidth: 0,
+            borderRadius: 2,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { display: false },
+            y: { display: false, beginAtZero: true },
+          },
+        },
+      });
+    },
+
+    fmtTok(n) {
+      if (!n) return '0';
+      if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
+      if (n >= 1e3) return (n/1e3).toFixed(1) + 'k';
+      return String(Math.round(n));
+    },
+    fmtCost(n) {
+      if (!n) return '$0.00';
+      if (n < 0.01) return '$' + n.toFixed(4);
+      if (n < 1)    return '$' + n.toFixed(3);
+      if (n < 100)  return '$' + n.toFixed(2);
+      return '$' + Math.round(n);
+    },
+    fmtPct(n) { return (n * 100).toFixed(0) + '%'; },
+  };
+}
+</script>
+{% endblock %}
