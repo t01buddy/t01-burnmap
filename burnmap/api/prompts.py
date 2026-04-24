@@ -28,10 +28,11 @@ if _FASTAPI:
     def list_prompts(
         search: str | None = Query(None, description="Filter by prompt text substring"),
         sort: str | None = Query("cost", description="Sort by: cost|runs|tokens|recent"),
+        agent: str | None = Query(None, description="Filter by agent name"),
         limit: int = Query(100, ge=1, le=1000),
         db: sqlite3.Connection = Depends(_db),
     ) -> JSONResponse:
-        rows = query_prompts(db, search=search, sort=sort, limit=limit)
+        rows = query_prompts(db, search=search, sort=sort, agent=agent, limit=limit)
         return JSONResponse({"prompts": rows, "count": len(rows)})
 
     @router.get("/api/prompts/{fingerprint}")
@@ -57,6 +58,7 @@ def query_prompts(
     *,
     search: str | None = None,
     sort: str | None = "cost",
+    agent: str | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
     """Return prompt list rows with agent badges and outlier flag."""
@@ -75,6 +77,10 @@ def query_prompts(
     if search:
         where_clauses.append("(pc.content LIKE ? OR p.fingerprint LIKE ?)")
         params.extend([f"%{search}%", f"%{search}%"])
+
+    if agent:
+        where_clauses.append("s.agent = ?")
+        params.append(agent)
 
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 

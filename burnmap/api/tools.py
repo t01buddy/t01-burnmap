@@ -26,19 +26,31 @@ if _FASTAPI:
 
     @router.get("/api/tools")
     def list_tools(
+        agent: str | None = Query(None, description="Filter by agent name"),
         limit: int = Query(100, ge=1, le=1000),
         db: sqlite3.Connection = Depends(_db),
     ) -> JSONResponse:
-        rows = query_tools(db, limit=limit)
+        rows = query_tools(db, agent=agent, limit=limit)
         return JSONResponse({"tools": rows})
 else:
     router = None  # type: ignore[assignment]
 
 
-def query_tools(conn: sqlite3.Connection, *, limit: int = 100) -> list[dict[str, Any]]:
+def query_tools(
+    conn: sqlite3.Connection,
+    *,
+    agent: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
     """Return per-tool aggregate rows (kind='tool'), ordered by total_cost_usd desc."""
+    params: list[Any] = []
+    agent_clause = ""
+    if agent:
+        agent_clause = "AND agent = ?"
+        params.append(agent)
+    params.append(limit)
     cur = conn.execute(
-        """
+        f"""
         SELECT
             name,
             COUNT(*)                                        AS calls,
@@ -50,12 +62,12 @@ def query_tools(conn: sqlite3.Connection, *, limit: int = 100) -> list[dict[str,
             SUM(cost_usd)                                   AS total_cost_usd,
             MAX(started_at)                                 AS last_seen_ms
         FROM spans
-        WHERE kind = 'tool'
+        WHERE kind = 'tool' {agent_clause}
         GROUP BY name
         ORDER BY total_cost_usd DESC
         LIMIT ?
         """,
-        (limit,),
+        params,
     )
     rows = [dict(r) for r in cur.fetchall()]
     # Compute share of total cost
