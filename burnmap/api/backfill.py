@@ -88,6 +88,100 @@ def is_first_run(conn: sqlite3.Connection) -> bool:
 
 # ── Ingestion ─────────────────────────────────────────────────────────────────
 
+def _ts_ms(ts: str | None) -> int:
+    """Parse ISO timestamp string to epoch milliseconds. Returns 0 on failure."""
+    if not ts:
+        return 0
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return int(dt.timestamp() * 1000)
+    except Exception:
+        return 0
+
+
+def build_spans_from_record(
+    record: dict[str, Any],
+    session_id: str,
+    agent: str,
+) -> list[dict[str, Any]]:
+    """Convert a single JSONL record into span rows (turn + tool children).
+
+    Returns a list: first element is the turn span, followed by one tool span
+    per tool_use found in the message content. Tool spans get parent_id set to
+    the turn span id. Subagent references (type=subagent_invocation) become
+    subagent-kind spans.
+    """
+    msg = record.get("message") or {}
+    role = msg.get("role") if isinstance(msg, dict) else None
+    if role is not None and role != "assistant":
+        return []
+    usage = record.get("usage") or (msg.get("usage") if isinstance(msg, dict) else None) or {}
+    if not usage:
+        return []
+
+    turn_id = record.get("uuid") or record.get("id") or str(uuid.uuid4())
+    input_tokens = int(usage.get("input_tokens") or 0)
+    output_tokens = int(usage.get("output_tokens") or 0)
+    cost = float(record.get("costUSD") or record.get("cost_usd") or 0.0)
+    ts = _ts_ms(record.get("timestamp") or record.get("ts"))
+    turn_name = record.get("name") or "turn"
+
+    spans: list[dict[str, Any]] = [{
+        "id": turn_id,
+        "session_id": session_id,
+        "agent": agent,
+        "kind": "turn",
+        "name": turn_name,
+        "parent_id": record.get("parent_id"),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cost_usd": cost,
+        "started_at": ts,
+        "ended_at": ts,
+    }]
+
+    # Extract tool_use and subagent blocks from message content
+    content = msg.get("content", []) if isinstance(msg, dict) else []
+    if isinstance(content, list):
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type", "")
+            if btype == "tool_use":
+                tool_id = block.get("id") or str(uuid.uuid4())
+                spans.append({
+                    "id": tool_id,
+                    "session_id": session_id,
+                    "agent": agent,
+                    "kind": "tool",
+                    "name": block.get("name") or "tool",
+                    "parent_id": turn_id,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cost_usd": 0.0,
+                    "started_at": ts,
+                    "ended_at": ts,
+                })
+            elif btype == "subagent_invocation":
+                sub_id = block.get("id") or str(uuid.uuid4())
+                spans.append({
+                    "id": sub_id,
+                    "session_id": session_id,
+                    "agent": agent,
+                    "kind": "subagent",
+                    "name": block.get("name") or "subagent",
+                    "parent_id": turn_id,
+                    "input_tokens": int(block.get("input_tokens") or 0),
+                    "output_tokens": int(block.get("output_tokens") or 0),
+                    "cost_usd": float(block.get("cost_usd") or 0.0),
+                    "started_at": ts,
+                    "ended_at": ts,
+                })
+
+    return spans
+
+
 def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
     """Parse a JSONL file and insert sessions/spans. Return spans inserted."""
     import json
@@ -124,25 +218,20 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
                 )
                 session_ids_seen.add(session_id)
 
-            # Only insert turn spans for assistant messages with usage
-            msg = record.get("message", {})
-            usage = msg.get("usage") or record.get("usage") or {}
-            if not usage:
-                continue
-
-            span_id = record.get("uuid") or record.get("id") or str(uuid.uuid4())
-            input_tokens = int(usage.get("input_tokens") or 0)
-            output_tokens = int(usage.get("output_tokens") or 0)
-            cost = float(record.get("costUSD") or record.get("cost_usd") or 0.0)
-
-            conn.execute(
-                """INSERT OR IGNORE INTO spans
-                   (id, session_id, agent, kind, name,
-                    input_tokens, output_tokens, cost_usd, started_at, ended_at)
-                   VALUES (?,?,?,?,?,?,?,?,0,0)""",
-                (span_id, session_id, agent, "turn", "turn", input_tokens, output_tokens, cost),
-            )
-            inserted += 1
+            for span in build_spans_from_record(record, session_id, agent):
+                conn.execute(
+                    """INSERT OR IGNORE INTO spans
+                       (id, session_id, agent, kind, name, parent_id,
+                        input_tokens, output_tokens, cost_usd, started_at, ended_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        span["id"], span["session_id"], span["agent"],
+                        span["kind"], span["name"], span.get("parent_id"),
+                        span["input_tokens"], span["output_tokens"], span["cost_usd"],
+                        span["started_at"], span["ended_at"],
+                    ),
+                )
+                inserted += 1
 
     conn.commit()
     return inserted
