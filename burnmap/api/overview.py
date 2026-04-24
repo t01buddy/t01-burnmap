@@ -57,7 +57,6 @@ def query_overview(conn: sqlite3.Connection) -> dict[str, Any]:
     ).fetchone()
     today_tokens = int(row["tokens"])
     today_cost = float(row["cost"])
-    today_sessions = int(row["sessions"])
 
     # Prompt count today
     prompts_row = conn.execute(
@@ -167,13 +166,6 @@ def query_overview(conn: sqlite3.Connection) -> dict[str, Any]:
         ).fetchone()["c"]
     )
 
-    quota = {
-        "block_cost": round(block_cost, 4),
-        "block_pct": block_pct,
-        "week_cost": round(week_cost, 4),
-        "week_pct": week_pct,
-    }
-
     return {
         "today": {
             "tokens": today_tokens,
@@ -194,5 +186,4 @@ def query_overview(conn: sqlite3.Connection) -> dict[str, Any]:
             "api": round(api_cost, 4),
             "total": round(today_cost, 4),
         },
-        "quota": quota,
     }
