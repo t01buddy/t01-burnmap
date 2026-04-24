@@ -1,6 +1,9 @@
 """FastAPI application factory for t01-burnmap."""
 from __future__ import annotations
 
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -8,16 +11,52 @@ from pathlib import Path
 
 from burnmap.auth import TokenAuthMiddleware
 from burnmap.api import tasks_router, providers_router
+from burnmap.api.events import router as events_router
+from burnmap.watcher import Watcher
+
+logger = logging.getLogger(__name__)
+
+
+def _collect_watch_paths() -> list[str]:
+    """Gather default_paths from all known adapters."""
+    paths: list[str] = []
+    try:
+        from t01_burnmap.adapters.registry import AdapterRegistry
+        from t01_burnmap.adapters.claude_code import ClaudeCodeAdapter
+        registry = AdapterRegistry()
+        registry.register("claude_code", ClaudeCodeAdapter)
+        for name in registry.all_names():
+            adapter = registry.instantiate(name)
+            paths.extend(str(p) for p in adapter.default_paths())
+    except ImportError:
+        logger.debug("No adapters available; using Claude Code default path")
+        paths.append(str(Path.home() / ".claude" / "projects"))
+    return paths
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start watcher on startup, stop on shutdown."""
+    watcher = Watcher()
+    watch_paths = _collect_watch_paths()
+    if watch_paths:
+        watcher.start(watch_paths)
+        logger.info("Watcher started on %d paths", len(watch_paths))
+    app.state.watcher = watcher
+    yield
+    watcher.stop()
+    logger.info("Watcher stopped")
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="t01-burnmap", version="0.1.0")
+    app = FastAPI(title="t01-burnmap", version="0.1.0", lifespan=lifespan)
 
     if TokenAuthMiddleware is not None:
         app.add_middleware(TokenAuthMiddleware)
 
     app.include_router(tasks_router)
     app.include_router(providers_router)
+    app.include_router(events_router)
 
     # Optional routers (only available if imported)
     try:
