@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "t01-burnmap"
+version = "0.1.0"
+description = "Local-first AI coding agent token usage dashboard"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["burnmap*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"

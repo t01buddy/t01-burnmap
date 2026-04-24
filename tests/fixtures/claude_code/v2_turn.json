@@ -1,0 +1,16 @@
+{
+  "uuid": "cc-turn-v2-001",
+  "sessionId": "session-xyz",
+  "model": "claude-3-7-sonnet-20250219",
+  "timestamp": "2025-03-15T09:30:00Z",
+  "usage": {
+    "input_tokens": 800,
+    "output_tokens": 200,
+    "cache_read_input_tokens": 5000,
+    "cache_creation_input_tokens": 300
+  },
+  "message": {
+    "role": "assistant",
+    "content": "Simple text response."
+  }
+}

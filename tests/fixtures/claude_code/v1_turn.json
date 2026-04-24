@@ -1,0 +1,17 @@
+{
+  "uuid": "cc-turn-v1-001",
+  "sessionId": "session-abc",
+  "model": "claude-3-5-sonnet-20241022",
+  "timestamp": "2024-11-01T10:00:00Z",
+  "usage": {
+    "input_tokens": 1200,
+    "output_tokens": 340
+  },
+  "message": {
+    "role": "assistant",
+    "content": [
+      {"type": "text", "text": "Here is the answer."},
+      {"type": "tool_use", "name": "Read", "input": {"file_path": "/foo/bar.py"}}
+    ]
+  }
+}
