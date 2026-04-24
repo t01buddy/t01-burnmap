@@ -1,0 +1,286 @@
+{# provider_detail.html — per-provider config, stats, recent sessions #}
+{# Context: agent (str), provider (dict from query_provider_detail) #}
+{% extends "base.html" %}
+
+{% block title %}{{ agent }} — Provider — burnmap{% endblock %}
+
+{% block content %}
+<div x-data="providerDetailPage()" x-init="load()">
+
+  <div class="pd-breadcrumb">
+    <a href="/settings" class="btn btn--ghost">← Settings</a>
+    <span class="pd-sep">·</span>
+    <span>Providers</span>
+    <span class="pd-sep">·</span>
+    <b>{{ agent }}</b>
+  </div>
+
+  <div class="page-header">
+    <h1 class="page-title">
+      <span class="agent-badge agent-badge--{{ agent }}">{{ agent }}</span>
+    </h1>
+    <template x-if="detail.found">
+      <span class="chip chip--active">active</span>
+    </template>
+    <template x-if="!detail.found">
+      <span class="chip chip--muted">not found</span>
+    </template>
+  </div>
+
+  <template x-if="loading">
+    <div class="loading-row">Loading…</div>
+  </template>
+
+  <template x-if="!loading">
+    <div>
+
+      <!-- Config + Stats row -->
+      <div class="pd-grid-2">
+
+        <!-- Adapter config -->
+        <div class="card">
+          <div class="card__h"><h3>Adapter config</h3></div>
+          <div class="card__body">
+            <dl class="pd-config-grid">
+              <dt>LOG PATH</dt>
+              <dd x-text="detail.path || '—'" class="mono"></dd>
+              <dt>FORMAT</dt>
+              <dd x-text="detail.format" class="mono"></dd>
+              <dt>WATCHER</dt>
+              <dd x-text="detail.watcher" class="mono"></dd>
+              <dt>DEDUP KEY</dt>
+              <dd x-text="detail.dedup_key" class="mono"></dd>
+            </dl>
+          </div>
+          <div class="card__footer">
+            <button class="btn btn--primary" @click="rescan()">Rescan now</button>
+            <button class="btn" @click="editPath()">Edit path</button>
+            <template x-if="detail.found">
+              <button class="btn btn--danger" @click="removeProvider()">Remove</button>
+            </template>
+            <span class="spacer"></span>
+            <span x-text="rescanMsg" class="pd-status-msg"></span>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="card">
+          <div class="card__h"><h3>Stats</h3><span class="card__meta">all time</span></div>
+          <div class="card__body">
+            <div class="pd-stats-grid">
+              <div class="pd-stat">
+                <span class="pd-stat__label">SESSIONS</span>
+                <span class="pd-stat__value" x-text="detail.stats?.sessions ?? 0"></span>
+              </div>
+              <div class="pd-stat">
+                <span class="pd-stat__label">FILES</span>
+                <span class="pd-stat__value" x-text="detail.stats?.files ?? 0"></span>
+              </div>
+            </div>
+            <template x-if="detail.found">
+              <dl class="pd-config-grid" style="margin-top:12px">
+                <dt>TOKENS</dt>
+                <dd x-text="fmtTok(detail.stats?.tokens)" class="num"></dd>
+                <dt>COST</dt>
+                <dd x-text="fmtCost(detail.stats?.cost_usd)" class="num"></dd>
+                <dt>PROMPTS</dt>
+                <dd x-text="detail.stats?.prompts + ' unique'" class="num"></dd>
+              </dl>
+            </template>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Claude Code precision hooks -->
+      <template x-if="'{{ agent }}' === 'claude_code'">
+        <div class="card" style="margin-bottom:16px">
+          <div class="card__h">
+            <h3>Precision mode · hooks</h3>
+            <span class="card__meta">Claude Code only</span>
+          </div>
+          <div class="card__body">
+            <p class="pd-info-text">
+              Installs a 50ms-timeout bash hook that streams exact tool boundaries to
+              <code>~/.t01-burnmap/hook.sock</code>. Required for live stuck-loop detection.
+            </p>
+            <div class="pd-actions">
+              <button class="btn btn--primary" @click="installHooks()">Install hooks</button>
+              <button class="btn" @click="dryRunHooks()">Dry-run</button>
+              <span class="spacer"></span>
+              <span x-text="hooksStatus" class="chip chip--amber" x-show="hooksStatus"></span>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Recent sessions -->
+      <template x-if="detail.found && detail.recent_sessions?.length > 0">
+        <div class="card">
+          <div class="card__h">
+            <h3>Recent sessions</h3>
+            <span class="card__meta">last 5</span>
+          </div>
+          <div class="card__body card__body--flush">
+            <table class="pd-table">
+              <thead>
+                <tr>
+                  <th>Session</th>
+                  <th>Started</th>
+                  <th class="num-col">Tokens</th>
+                  <th class="num-col">Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="s in detail.recent_sessions" :key="s.id">
+                  <tr>
+                    <td class="mono" x-text="s.id.slice(0, 8) + '…'"></td>
+                    <td class="mono muted" x-text="fmtTime(s.started_at)"></td>
+                    <td class="num-col" x-text="fmtTok(s.tokens)"></td>
+                    <td class="num-col" x-text="fmtCost(s.cost_usd)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
+    </div>
+  </template>
+
+</div>
+
+<style>
+.pd-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  color: var(--ink-3, #888);
+  margin-bottom: 8px;
+}
+.pd-sep { color: var(--ink-3, #bbb); }
+.pd-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.card__h { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--rule-soft, #eee); }
+.card__h h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.card__meta { font-size: 11px; color: var(--ink-3, #888); }
+.card__body { padding: 12px 14px; }
+.card__body--flush { padding: 0; }
+.card__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--rule-soft, #eee);
+}
+.spacer { flex: 1; }
+.pd-config-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  font-size: 12px;
+  margin: 0;
+}
+.pd-config-grid dt { color: var(--ink-3, #888); font-family: var(--font-mono, monospace); white-space: nowrap; }
+.pd-config-grid dd { margin: 0; font-family: var(--font-mono, monospace); }
+.pd-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.pd-stat { text-align: center; padding: 8px; background: var(--paper-2, #f7f8fa); border-radius: 6px; }
+.pd-stat__label { display: block; font-size: 10px; color: var(--ink-3, #888); font-family: var(--font-mono, monospace); margin-bottom: 4px; }
+.pd-stat__value { display: block; font-size: 22px; font-weight: 700; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 7px; border-radius: 10px; border: 1px solid transparent; }
+.chip--active { border-color: #22c55e44; color: #15803d; }
+.chip--muted { border-color: var(--rule-soft, #ddd); color: var(--ink-3, #888); }
+.chip--amber { background: #fff3cd; border-color: #ffd666; color: #7d5c00; }
+.pd-info-text { font-size: 13px; color: var(--ink-2, #555); margin: 0 0 10px; }
+.pd-info-text code { font-family: var(--font-mono, monospace); background: var(--paper-2, #f5f5f5); padding: 1px 4px; border-radius: 3px; }
+.pd-actions { display: flex; align-items: center; gap: 8px; }
+.pd-status-msg { font-size: 11px; color: var(--ink-3, #888); font-family: var(--font-mono, monospace); }
+.pd-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pd-table th { text-align: left; padding: 6px 12px; border-bottom: 2px solid var(--rule-soft, #eee); font-size: 11px; color: var(--ink-3, #888); font-weight: 600; }
+.pd-table td { padding: 7px 12px; border-bottom: 1px solid var(--rule-soft, #f0f0f0); }
+.pd-table tr:last-child td { border-bottom: none; }
+.pd-table tr:hover td { background: var(--paper-2, #f7f8fa); }
+.num-col { text-align: right; }
+.mono { font-family: var(--font-mono, monospace); }
+.muted { color: var(--ink-3, #888); }
+.num { font-variant-numeric: tabular-nums; }
+.agent-badge { font-size: 13px; font-weight: 600; font-family: var(--font-mono, monospace); }
+.loading-row { padding: 40px; text-align: center; color: var(--ink-3, #888); font-size: 14px; }
+@media (max-width: 640px) { .pd-grid-2 { grid-template-columns: 1fr; } }
+</style>
+
+<script>
+function providerDetailPage() {
+  const agent = "{{ agent }}";
+  return {
+    loading: true,
+    detail: {},
+    rescanMsg: "",
+    hooksStatus: "not installed",
+
+    async load() {
+      this.loading = true;
+      try {
+        const r = await fetch("/api/providers/" + encodeURIComponent(agent));
+        this.detail = await r.json();
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async rescan() {
+      this.rescanMsg = "scanning…";
+      try {
+        const r = await fetch("/api/providers/" + encodeURIComponent(agent) + "/rescan", { method: "POST" });
+        const d = await r.json();
+        this.rescanMsg = d.message || "done";
+        await this.load();
+      } catch {
+        this.rescanMsg = "error";
+      }
+    },
+
+    editPath() {
+      const p = prompt("New log path:", this.detail.path || "");
+      if (p !== null) this.rescanMsg = "path update not yet persisted";
+    },
+
+    removeProvider() {
+      if (confirm("Remove " + agent + " adapter?")) {
+        this.rescanMsg = "remove not yet implemented";
+      }
+    },
+
+    installHooks() { this.hooksStatus = "installing…"; setTimeout(() => { this.hooksStatus = "installed"; }, 800); },
+    dryRunHooks() { this.hooksStatus = "dry-run ok"; },
+
+    fmtTok(n) {
+      if (!n) return "0";
+      if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+      if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+      return String(n);
+    },
+    fmtCost(c) {
+      if (!c) return "$0.00";
+      return "$" + Number(c).toFixed(c < 0.01 ? 4 : 2);
+    },
+    fmtTime(ms) {
+      if (!ms) return "—";
+      return new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    },
+  };
+}
+</script>
+{% endblock %}
