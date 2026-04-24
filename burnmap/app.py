@@ -58,6 +58,13 @@ def create_app() -> FastAPI:
     app.include_router(providers_router)
     app.include_router(events_router)
 
+    try:
+        from burnmap.api.backfill import router as backfill_router
+        if backfill_router is not None:
+            app.include_router(backfill_router)
+    except ImportError:
+        pass
+
     # Optional routers (only available if imported)
     try:
         from burnmap.api.outlier_review import router as outlier_router
