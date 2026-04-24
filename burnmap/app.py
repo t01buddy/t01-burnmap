@@ -89,6 +89,13 @@ def create_app() -> FastAPI:
     except ImportError:
         pass
 
+    try:
+        from burnmap.api.backfill import router as backfill_router
+        if backfill_router is not None:
+            app.include_router(backfill_router)
+    except ImportError:
+        pass
+
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
