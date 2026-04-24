@@ -13,7 +13,8 @@ def main() -> None:
     if not args or args[0] in ("-h", "--help"):
         print("Usage: burnmap <command>")
         print("Commands:")
-        print("  sweep   Run 2-sigma outlier sweep on all spans")
+        print("  sweep         Run 2-sigma outlier sweep on all spans")
+        print("  sync-pricing  Refresh pricing.yaml from LiteLLM upstream")
         return
 
     if args[0] == "sweep":
@@ -24,6 +25,9 @@ def main() -> None:
             f"[burnmap sweep] fingerprints={result.fingerprints} "
             f"flagged={result.flagged} cleared={result.cleared}"
         )
+    elif args[0] == "sync-pricing":
+        from burnmap.pricing import sync_pricing_yaml
+        print(sync_pricing_yaml())
     else:
         print(f"Unknown command: {args[0]}", file=sys.stderr)
         sys.exit(1)
