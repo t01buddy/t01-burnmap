@@ -6,5 +6,10 @@ from .tools import router as tools_router
 from .sessions import router as sessions_router
 from .settings import router as settings_router
 from .prompts import router as prompts_router
+from .overview import router as overview_router
 
-__all__ = ["tasks_router", "providers_router", "quota_router", "trace_router", "tools_router", "sessions_router", "settings_router", "prompts_router"]
+__all__ = [
+    "tasks_router", "providers_router", "quota_router", "trace_router",
+    "tools_router", "sessions_router", "settings_router", "prompts_router",
+    "overview_router",
+]

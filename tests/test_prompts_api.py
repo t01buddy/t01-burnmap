@@ -101,6 +101,14 @@ class TestQueryPrompts:
         rows = query_prompts(db, search="zzznonexistent")
         assert rows == []
 
+    def test_agent_filter_match(self, db):
+        rows = query_prompts(db, agent="claude_code")
+        assert len(rows) == 2
+
+    def test_agent_filter_no_match(self, db):
+        rows = query_prompts(db, agent="codex")
+        assert rows == []
+
 
 class TestQueryPromptDetail:
     def test_returns_detail_for_known_fp(self, db):

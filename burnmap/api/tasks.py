@@ -27,10 +27,11 @@ if _FASTAPI:
     @router.get("/api/tasks")
     def list_tasks(
         kind: str | None = Query(None, description="Filter by kind: slash|skill|subagent"),
+        agent: str | None = Query(None, description="Filter by agent name"),
         limit: int = Query(100, ge=1, le=1000),
         db: sqlite3.Connection = Depends(_db),
     ) -> JSONResponse:
-        rows = query_tasks(db, kind=kind, limit=limit)
+        rows = query_tasks(db, kind=kind, agent=agent, limit=limit)
         return JSONResponse({"tasks": rows})
 else:
     router = None  # type: ignore[assignment]
@@ -45,6 +46,7 @@ def query_tasks(
     conn: sqlite3.Connection,
     *,
     kind: str | None = None,
+    agent: str | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
     """Return aggregated task rows from the spans table.
@@ -65,6 +67,10 @@ def query_tasks(
         placeholders = ",".join("?" * len(_VALID_KINDS))
         where = f"WHERE kind IN ({placeholders})"
         params.extend(sorted(_VALID_KINDS))
+
+    if agent is not None:
+        where += " AND agent = ?"
+        params.append(agent)
 
     sql = f"""
         SELECT

@@ -25,6 +25,8 @@ def _seed(conn: sqlite3.Connection) -> None:
         ("t3", "sess-a", "claude_code", "tool", "Write",  50, 0, 0.005, 1_700_000_002_000),
         # non-tool kind — must NOT appear
         ("t4", "sess-a", "claude_code", "slash", "/commit", 400, 100, 0.010, 1_700_000_003_000),
+        # different agent
+        ("t5", "sess-b", "codex", "tool", "Read", 80, 0, 0.001, 1_700_000_004_000),
     ]
     conn.executemany(
         "INSERT INTO spans (id, session_id, agent, kind, name, input_tokens, output_tokens, cost_usd, started_at)"
@@ -46,18 +48,19 @@ class TestQueryTools:
     def test_aggregates_calls(self, db):
         rows = query_tools(db)
         read_row = next(r for r in rows if r["name"] == "Read")
-        assert read_row["calls"] == 2
+        # t1, t2 (claude_code) + t5 (codex) = 3 calls
+        assert read_row["calls"] == 3
 
     def test_token_sums(self, db):
         rows = query_tools(db)
         read_row = next(r for r in rows if r["name"] == "Read")
-        assert read_row["total_input_tokens"] == 300
+        assert read_row["total_input_tokens"] == 380
         assert read_row["total_output_tokens"] == 0
 
     def test_cost_sum(self, db):
         rows = query_tools(db)
         read_row = next(r for r in rows if r["name"] == "Read")
-        assert abs(read_row["total_cost_usd"] - 0.003) < 1e-9
+        assert abs(read_row["total_cost_usd"] - 0.004) < 1e-9
 
     def test_ordered_by_cost_desc(self, db):
         rows = query_tools(db)
@@ -72,6 +75,16 @@ class TestQueryTools:
     def test_limit(self, db):
         rows = query_tools(db, limit=1)
         assert len(rows) == 1
+
+    def test_agent_filter(self, db):
+        rows = query_tools(db, agent="codex")
+        assert len(rows) == 1
+        assert rows[0]["name"] == "Read"
+        assert rows[0]["calls"] == 1
+
+    def test_agent_filter_no_match(self, db):
+        rows = query_tools(db, agent="unknown_agent")
+        assert rows == []
 
     def test_empty_db(self):
         conn = sqlite3.connect(":memory:")

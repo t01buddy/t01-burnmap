@@ -10,7 +10,11 @@ from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
 from burnmap.auth import TokenAuthMiddleware
-from burnmap.api import tasks_router, providers_router
+from burnmap.api import (
+    tasks_router, providers_router, quota_router, trace_router,
+    tools_router, sessions_router, settings_router, prompts_router,
+    overview_router,
+)
 from burnmap.api.events import router as events_router
 from burnmap.watcher import Watcher
 
@@ -54,8 +58,13 @@ def create_app() -> FastAPI:
     if TokenAuthMiddleware is not None:
         app.add_middleware(TokenAuthMiddleware)
 
-    app.include_router(tasks_router)
-    app.include_router(providers_router)
+    for router in (
+        overview_router, tasks_router, providers_router, quota_router,
+        trace_router, tools_router, sessions_router, settings_router,
+        prompts_router,
+    ):
+        if router is not None:
+            app.include_router(router)
     app.include_router(events_router)
 
     # Optional routers (only available if imported)
