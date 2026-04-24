@@ -1,0 +1,176 @@
+{# export.html — export page: format picker, date range, content warning, download #}
+{% extends "base.html" %}
+
+{% block title %}Export — burnmap{% endblock %}
+
+{% block content %}
+<div x-data="exportPage()" x-init="init()">
+
+  <div class="page-header">
+    <h1 class="page-title">Export</h1>
+  </div>
+
+  <!-- Content-mode warning banner -->
+  <template x-if="contentModeEnabled">
+    <div class="content-warning-banner">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+      <span>Content mode is enabled. Exports may include prompt text and model responses.</span>
+    </div>
+  </template>
+
+  <div class="export-form">
+
+    <!-- Format picker -->
+    <div class="form-section">
+      <label class="form-label">Format</label>
+      <div class="format-toggle">
+        <template x-for="fmt in formats" :key="fmt">
+          <button class="format-btn"
+                  :class="format === fmt ? 'format-btn--active' : ''"
+                  @click="format = fmt"
+                  x-text="fmt"></button>
+        </template>
+      </div>
+    </div>
+
+    <!-- Date range -->
+    <div class="form-section">
+      <label class="form-label">Date range</label>
+      <div class="date-range">
+        <input type="date" class="date-input" x-model="dateFrom" />
+        <span class="date-sep">to</span>
+        <input type="date" class="date-input" x-model="dateTo" />
+      </div>
+    </div>
+
+    <!-- Include content checkbox (only shown when content mode enabled) -->
+    <template x-if="contentModeEnabled">
+      <div class="form-section">
+        <label class="checkbox-label">
+          <input type="checkbox" x-model="includeContent" class="checkbox-input" />
+          <span>Include prompt content in export</span>
+        </label>
+        <p class="form-hint">When checked, exported data will include raw prompt text and model responses.</p>
+      </div>
+    </template>
+
+    <!-- Download button -->
+    <div class="form-section">
+      <button class="btn-download"
+              :disabled="downloading"
+              @click="download()">
+        <template x-if="!downloading">
+          <span>Download <span x-text="format"></span></span>
+        </template>
+        <template x-if="downloading">
+          <span>Preparing…</span>
+        </template>
+      </button>
+      <template x-if="error">
+        <p class="error-msg" x-text="error"></p>
+      </template>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+function exportPage() {
+  return {
+    formats: ['CSV', 'OTLP', 'JSON'],
+    format: 'CSV',
+    dateFrom: '',
+    dateTo: '',
+    includeContent: false,
+    contentModeEnabled: false,
+    downloading: false,
+    error: null,
+
+    async init() {
+      // Detect content mode from settings API
+      try {
+        const r = await fetch('/api/settings');
+        if (r.ok) {
+          const s = await r.json();
+          this.contentModeEnabled = !!(s.content_mode);
+        }
+      } catch (_) { /* settings API optional */ }
+
+      // Default date range: last 30 days
+      const now = new Date();
+      this.dateTo = now.toISOString().slice(0, 10);
+      now.setDate(now.getDate() - 30);
+      this.dateFrom = now.toISOString().slice(0, 10);
+    },
+
+    async download() {
+      this.downloading = true;
+      this.error = null;
+      try {
+        const params = new URLSearchParams({
+          format: this.format,
+          from: this.dateFrom,
+          to: this.dateTo,
+          include_content: this.includeContent ? '1' : '0',
+        });
+        const r = await fetch(`/api/export?${params}`);
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.detail || `Export failed (${r.status})`);
+        }
+        const blob = await r.blob();
+        const ext = this.format === 'CSV' ? 'csv' : this.format === 'JSON' ? 'json' : 'jsonl';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `burnmap-export.${ext}`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        this.error = e.message;
+      } finally {
+        this.downloading = false;
+      }
+    },
+  };
+}
+</script>
+
+<style>
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.page-title { font-size: 20px; font-weight: 600; }
+
+.content-warning-banner {
+  display: flex; align-items: center; gap: 8px;
+  background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px;
+  padding: 10px 14px; margin-bottom: 20px; font-size: 13px; color: #856404;
+}
+
+.export-form { max-width: 480px; display: flex; flex-direction: column; gap: 24px; }
+
+.form-section { display: flex; flex-direction: column; gap: 8px; }
+.form-label { font-size: 12px; font-weight: 700; color: var(--ink-3, #888); text-transform: uppercase; letter-spacing: .05em; }
+.form-hint { font-size: 12px; color: var(--ink-3, #888); margin: 0; }
+
+.format-toggle { display: flex; gap: 0; border: 1px solid var(--rule-soft, #ddd); border-radius: 6px; overflow: hidden; width: fit-content; }
+.format-btn { font-size: 13px; padding: 6px 18px; border: none; background: none; cursor: pointer; border-right: 1px solid var(--rule-soft, #ddd); }
+.format-btn:last-child { border-right: none; }
+.format-btn--active { background: var(--accent, #e65c00); color: #fff; font-weight: 600; }
+
+.date-range { display: flex; align-items: center; gap: 8px; }
+.date-input { font-size: 13px; padding: 6px 10px; border: 1px solid var(--rule-soft, #ddd); border-radius: 4px; }
+.date-sep { font-size: 13px; color: var(--ink-3, #888); }
+
+.checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.checkbox-input { width: 15px; height: 15px; cursor: pointer; }
+
+.btn-download {
+  font-size: 14px; font-weight: 600; padding: 10px 24px;
+  background: var(--accent, #e65c00); color: #fff; border: none;
+  border-radius: 6px; cursor: pointer; width: fit-content;
+}
+.btn-download:disabled { opacity: 0.6; cursor: not-allowed; }
+.error-msg { color: #c0392b; font-size: 13px; margin: 0; }
+</style>
+{% endblock %}
