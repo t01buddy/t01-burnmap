@@ -1,0 +1,78 @@
+{# empty_state.html — reusable empty-state macro
+   Usage: {% from "components/empty_state.html" import empty_state %}
+          {{ empty_state(icon="…svg…", title="No sessions yet", msg="Run a session to see data here.", cta_label="Open docs", cta_href="…") }}
+#}
+
+{% macro empty_state(icon, title, msg, cta_label=none, cta_href=none) %}
+<div class="empty-state">
+  <div class="empty-state__icon">{{ icon | safe }}</div>
+  <div class="empty-state__title">{{ title }}</div>
+  <p class="empty-state__msg">{{ msg }}</p>
+  {% if cta_label and cta_href %}
+  <a href="{{ cta_href }}" class="btn" style="margin-top: 16px;">{{ cta_label }}</a>
+  {% endif %}
+</div>
+{% endmacro %}
+
+
+{# Per-page empty state definitions for x-show="items.length === 0" Alpine.js guard #}
+
+{% macro overview_empty() %}
+{{ empty_state(
+  icon='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h18v18H3z" opacity=".2"/><path d="M3 9h18M9 21V9"/></svg>',
+  title="No data yet",
+  msg="Start a Claude Code session to begin tracking token usage and costs.",
+  cta_label="How to get started",
+  cta_href="https://docs.anthropic.com/claude-code"
+) }}
+{% endmacro %}
+
+{% macro prompts_empty() %}
+{{ empty_state(
+  icon='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 9h8M8 13h5M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7l-4 4V5z"/></svg>',
+  title="No prompts recorded",
+  msg="Prompts appear here once you run Claude Code. Try a session to populate this page.",
+  cta_label="Run backfill",
+  cta_href="/internal/backfill"
+) }}
+{% endmacro %}
+
+{% macro tools_empty() %}
+{{ empty_state(
+  icon='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3-3a1 1 0 0 0 0-1.4l-1.6-1.6a1 1 0 0 0-1.4 0l-3 3z"/><path d="M5 20l7-7"/><circle cx="7.5" cy="17.5" r="2.5"/></svg>',
+  title="No tool calls yet",
+  msg="Tool usage aggregates appear after sessions are parsed. Run a backfill to catch up.",
+  cta_label="Run backfill",
+  cta_href="/internal/backfill"
+) }}
+{% endmacro %}
+
+{% macro tasks_empty() %}
+{{ empty_state(
+  icon='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h4"/></svg>',
+  title="No tasks tracked",
+  msg="Slash commands, skills, and subagent runs appear here once you start using Claude Code.",
+  cta_label="Run backfill",
+  cta_href="/internal/backfill"
+) }}
+{% endmacro %}
+
+{% macro sessions_empty() %}
+{{ empty_state(
+  icon='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+  title="No sessions found",
+  msg="Sessions appear after your first Claude Code run. Check that burnmap is watching the right log path.",
+  cta_label="Check settings",
+  cta_href="/settings"
+) }}
+{% endmacro %}
+
+{% macro outliers_empty() %}
+{{ empty_state(
+  icon='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  title="No outliers detected",
+  msg="The nightly 2-sigma sweep hasn't flagged any runs yet. This is good — check back after more sessions.",
+  cta_label=none,
+  cta_href=none
+) }}
+{% endmacro %}
