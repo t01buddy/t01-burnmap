@@ -93,7 +93,7 @@ def _ts_ms(ts: str | None) -> int:
     if not ts:
         return 0
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         return int(dt.timestamp() * 1000)
     except Exception:
