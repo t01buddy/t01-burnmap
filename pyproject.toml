@@ -12,6 +12,9 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio"]
 
+[project.scripts]
+burnmap = "burnmap.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["burnmap*"]

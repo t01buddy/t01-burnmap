@@ -30,7 +30,7 @@ def _seed(conn: sqlite3.Connection) -> None:
         ("s6", "sess-c", "claude_code", "tool",    "Read",         0,   0, 0.0,   1_700_000_005_000),
     ]
     conn.executemany(
-        "INSERT INTO spans VALUES (?,?,?,?,?,?,?,?,?)", rows
+        "INSERT INTO spans (id, session_id, agent, kind, name, input_tokens, output_tokens, cost_usd, started_at) VALUES (?,?,?,?,?,?,?,?,?)", rows
     )
     conn.commit()
 
