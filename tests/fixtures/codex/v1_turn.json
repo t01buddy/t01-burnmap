@@ -1,0 +1,9 @@
+{
+  "id": "codex-turn-v1-001",
+  "session_id": "codex-session-aaa",
+  "model": "gpt-4o",
+  "created_at": "2024-10-01T08:00:00Z",
+  "prompt_tokens": 600,
+  "completion_tokens": 150,
+  "prompt": "Write a function to sort a list."
+}
