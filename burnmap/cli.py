@@ -17,7 +17,7 @@ def main() -> None:
         print("  sync-pricing  Refresh pricing.yaml from LiteLLM upstream")
         print("  token         Manage auth tokens (--create)")
         print("  serve         Start the FastAPI server (--host, --port, --reload)")
-        print("  content       Manage prompt content (wipe)")
+        print("  content       Manage prompt content (wipe, mode)")
         return
 
     if args[0] == "token":
@@ -59,7 +59,8 @@ def _cmd_content(args: list[str]) -> None:
     if not args or args[0] in ("-h", "--help"):
         print("Usage: burnmap content <subcommand>")
         print("Subcommands:")
-        print("  wipe   Delete all stored prompt_content rows")
+        print("  wipe         Delete all stored prompt_content rows")
+        print("  mode <mode>  Set content mode (off|fingerprint_only|preview|full)")
         return
     if args[0] == "wipe":
         from burnmap.db.schema import get_content_db, init_content_db
@@ -69,6 +70,17 @@ def _cmd_content(args: list[str]) -> None:
         deleted = wipe_content(cconn)
         cconn.close()
         print(f"[burnmap content wipe] deleted={deleted}")
+    elif args[0] == "mode":
+        if len(args) < 2:
+            print("Usage: burnmap content mode <mode>", file=sys.stderr)
+            sys.exit(1)
+        from burnmap.api.content import set_content_mode
+        try:
+            set_content_mode(args[1])
+            print(f"[burnmap content mode] set to {args[1]!r}")
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
     else:
         print(f"Unknown content subcommand: {args[0]}", file=sys.stderr)
         sys.exit(1)

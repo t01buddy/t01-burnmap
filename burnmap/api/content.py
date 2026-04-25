@@ -61,5 +61,26 @@ if _FASTAPI:
         cconn.close()
         return JSONResponse({"deleted": deleted})
 
+    @router.post("/api/settings/content-mode")
+    def set_content_mode_endpoint(mode: str = Body(..., embed=True)) -> JSONResponse:
+        """PRD alias: POST /api/settings/content-mode."""
+        try:
+            set_content_mode(mode)
+        except ValueError as exc:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail=str(exc))
+        return JSONResponse({"mode": mode})
+
+    @router.post("/api/wipe")
+    def wipe_endpoint() -> JSONResponse:
+        """PRD alias: POST /api/wipe — clear all stored prompt text."""
+        from burnmap.db.schema import get_content_db, init_content_db
+        from burnmap.fingerprint import wipe_content
+        cconn = get_content_db()
+        init_content_db(cconn)
+        deleted = wipe_content(cconn)
+        cconn.close()
+        return JSONResponse({"deleted": deleted})
+
 else:
     router = None  # type: ignore[assignment]
