@@ -18,7 +18,7 @@
 | **Prompts** | Detail: runs list, histogram, outlier flags | P0 |
 | **Tasks** | Slash commands, skills, subagent calls — same shape as prompts | P1 |
 | **Quotas** | 5-hour block + weekly panels with ETA and burn rate | P0 |
-| **Privacy** | Four content modes with switch and wipe | P0 |
+| **Privacy** | Three content modes (hash, excerpt, full) with switch and wipe | P0 |
 | **Privacy** | No prompt text in export unless `--include-content` | P0 |
 | **Auth** | Token gate when HOST != localhost | P0 |
 | **Ops** | One-command install, zero network for history | P0 |

@@ -18,7 +18,7 @@
 | **Prompts** | Prompt detail: runs list, histogram, outlier flags | P0 |
 | **Tasks** | Same page shape for slash commands, skills, subagent Task calls | P1 |
 | **Quotas** | Claude 5-hour block + weekly panels with ETA and burn rate | P0 |
-| **Privacy** | Four content modes with clean switch and wipe commands | P0 |
+| **Privacy** | Three content modes (hash, excerpt, full) with clean switch and wipe commands | P0 |
 | **Privacy** | No prompt text in any export unless `--include-content` passed | P0 |
 | **Auth** | Token gate when `HOST ≠ localhost` | P0 |
 | **Ops** | One-command install, zero required network access for history | P0 |
