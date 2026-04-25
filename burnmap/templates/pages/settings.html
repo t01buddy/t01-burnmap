@@ -199,15 +199,25 @@ function settingsPage() {
 
     async load() {
       this.loading = true;
-      const [stor, prov, price] = await Promise.all([
-        fetch('/api/settings/storage').then(r => r.json()),
-        fetch('/api/settings/providers').then(r => r.json()),
-        fetch('/api/settings/pricing').then(r => r.json()),
-      ]);
-      this.storage = stor;
-      this.providers = prov.providers || [];
-      this.pricing = price;
-      this.loading = false;
+      const safeJson = async (url) => {
+        try {
+          const r = await fetch(url);
+          if (!r.ok) return null;
+          return await r.json();
+        } catch { return null; }
+      };
+      try {
+        const [stor, prov, price] = await Promise.all([
+          safeJson('/api/settings/storage'),
+          safeJson('/api/settings/providers'),
+          safeJson('/api/settings/pricing'),
+        ]);
+        this.storage = stor;
+        this.providers = (prov && prov.providers) || [];
+        this.pricing = price;
+      } finally {
+        this.loading = false;
+      }
     },
 
     storageRows() {
