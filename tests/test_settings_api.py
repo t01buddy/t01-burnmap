@@ -43,8 +43,7 @@ def conn(tmp_path):
             last_seen INTEGER DEFAULT 0,
             run_count INTEGER DEFAULT 1,
             total_tokens INTEGER DEFAULT 0,
-            total_cost REAL DEFAULT 0.0,
-            content_mode TEXT DEFAULT 'hash'
+            total_cost REAL DEFAULT 0.0
         );
         CREATE TABLE prompt_runs (
             id TEXT PRIMARY KEY,
@@ -76,7 +75,7 @@ class TestQueryStorageInfo:
         sid = str(uuid.uuid4())
         conn.execute("INSERT INTO sessions(id, agent) VALUES (?, 'claude_code')", (sid,))
         conn.execute(
-            "INSERT INTO prompts(fingerprint, content_mode) VALUES ('fp1', 'preview')"
+            "INSERT INTO prompts(fingerprint) VALUES ('fp1')"
         )
         conn.commit()
         with patch("burnmap.api.settings._DEFAULT_DB", fake_db):
