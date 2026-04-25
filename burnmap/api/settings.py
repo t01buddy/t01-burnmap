@@ -73,11 +73,14 @@ def query_providers(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     result = []
     for adapter in adapters:
         agent = adapter["agent"]
-        row = conn.execute(
-            "SELECT COUNT(DISTINCT id) AS sessions FROM sessions WHERE agent = ?",
-            (agent,),
-        ).fetchone()
-        sessions = row["sessions"] if row else 0
+        try:
+            row = conn.execute(
+                "SELECT COUNT(DISTINCT id) AS sessions FROM sessions WHERE agent = ?",
+                (agent,),
+            ).fetchone()
+            sessions = row["sessions"] if row else 0
+        except sqlite3.OperationalError:
+            sessions = 0
         result.append({
             "agent": agent,
             "found": adapter["found"],
