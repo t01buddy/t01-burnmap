@@ -97,7 +97,10 @@ _SCHEMA_SQL = """
 _CONTENT_SCHEMA_SQL = """
     CREATE TABLE IF NOT EXISTS prompt_content (
         fingerprint   TEXT PRIMARY KEY,
-        content       TEXT NOT NULL,    -- full prompt text (opt-in)
+        -- Stored when content_mode is 'preview' (truncated) or 'full' (complete text).
+        -- content_mode is global: 'off' | 'fingerprint_only' | 'preview' | 'full'
+        -- Managed by burnmap/api/content.py; 'off' and 'fingerprint_only' store nothing here.
+        content       TEXT NOT NULL,
         stored_at     INTEGER DEFAULT 0
     );
 """
