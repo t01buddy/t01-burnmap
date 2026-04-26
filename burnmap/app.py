@@ -27,8 +27,14 @@ def _collect_watch_paths() -> list[str]:
     try:
         from t01_burnmap.adapters.registry import AdapterRegistry
         from t01_burnmap.adapters.claude_code import ClaudeCodeAdapter
+        from t01_burnmap.adapters.codex import CodexAdapter
+        from t01_burnmap.adapters.cline import ClineAdapter
+        from t01_burnmap.adapters.aider import AiderAdapter
         registry = AdapterRegistry()
         registry.register("claude_code", ClaudeCodeAdapter)
+        registry.register("codex", CodexAdapter)
+        registry.register("cline", ClineAdapter)
+        registry.register("aider", AiderAdapter)
         for name in registry.all_names():
             adapter = registry.instantiate(name)
             paths.extend(str(p) for p in adapter.default_paths())
