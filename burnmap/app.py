@@ -103,6 +103,13 @@ def create_app() -> FastAPI:
     except ImportError:
         pass
 
+    try:
+        from burnmap.api.alerts import router as alerts_router
+        if alerts_router is not None:
+            app.include_router(alerts_router)
+    except ImportError:
+        pass
+
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
