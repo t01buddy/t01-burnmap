@@ -220,10 +220,14 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
 
             for span in build_spans_from_record(record, session_id, agent):
                 conn.execute(
-                    """INSERT OR IGNORE INTO spans
+                    """INSERT INTO spans
                        (id, session_id, agent, kind, name, parent_id,
                         input_tokens, output_tokens, cost_usd, started_at, ended_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                       ON CONFLICT(id) DO UPDATE SET
+                         input_tokens  = MAX(input_tokens,  excluded.input_tokens),
+                         output_tokens = MAX(output_tokens, excluded.output_tokens),
+                         cost_usd      = MAX(cost_usd,      excluded.cost_usd)""",
                     (
                         span["id"], span["session_id"], span["agent"],
                         span["kind"], span["name"], span.get("parent_id"),
