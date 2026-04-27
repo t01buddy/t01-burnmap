@@ -40,7 +40,10 @@ def _collect_watch_paths() -> list[str]:
             adapter = registry.instantiate(name)
             paths.extend(str(p) for p in adapter.default_paths())
     except ImportError:
-        logger.debug("No adapters available; using Claude Code default path")
+        logger.warning(
+            "Adapter imports failed; falling back to Claude Code default path. "
+            "Install or fix burnmap.adapters to watch all agent logs."
+        )
         paths.append(str(Path.home() / ".claude" / "projects"))
     return paths
 
