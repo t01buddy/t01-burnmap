@@ -117,8 +117,16 @@
       </div>
 
       <button class="cta-btn"
+              @click="runBackfill()"
+              :disabled="backfilling || adapters.filter(a => a.found).length === 0"
+              x-show="!backfillDone">
+        <span x-show="!backfilling">Run Backfill</span>
+        <span x-show="backfilling">Running…</span>
+      </button>
+      <button class="cta-btn"
               @click="openDashboard()"
-              :disabled="adapters.filter(a => a.found).length === 0">
+              :disabled="!backfillDone"
+              x-show="backfillDone">
         Open dashboard
       </button>
       <span class="skip-link" @click="openDashboard()">Skip setup</span>
@@ -133,6 +141,9 @@ function onboardingPage() {
     loading: true,
     adapters: [],
     progress: { percent_complete: 0, sessions_ingested: 0, spans_ingested: 0, log_files_found: 0 },
+    backfilling: false,
+    backfillDone: false,
+    _pollTimer: null,
 
     async load() {
       this.loading = true;
@@ -145,9 +156,30 @@ function onboardingPage() {
         const pData = await progressRes.json();
         this.adapters = aData.adapters || [];
         this.progress = pData;
+        if (pData.percent_complete >= 100) this.backfillDone = true;
       } finally {
         this.loading = false;
       }
+    },
+
+    async runBackfill() {
+      if (this.backfilling) return;
+      this.backfilling = true;
+      try {
+        await fetch('/api/backfill/run', { method: 'POST' });
+      } catch (_) { /* ignore — polling will reflect state */ }
+      this._pollTimer = setInterval(async () => {
+        try {
+          const res = await fetch('/api/onboarding/backfill');
+          const data = await res.json();
+          this.progress = data;
+          if (data.percent_complete >= 100) {
+            clearInterval(this._pollTimer);
+            this.backfilling = false;
+            this.backfillDone = true;
+          }
+        } catch (_) { /* keep polling */ }
+      }, 1500);
     },
 
     openDashboard() {
