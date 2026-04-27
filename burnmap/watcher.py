@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler, FileModifiedEvent, FileCreatedEvent
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ class Watcher:
     """Watches adapter log directories and exposes an async event stream."""
 
     def __init__(self) -> None:
-        self._observer: Observer | None = None
+        self._observer: PollingObserver | None = None
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._subscribers: list[asyncio.Queue[dict[str, Any]]] = []
 
@@ -49,7 +49,7 @@ class Watcher:
         """Start the watchdog observer on the given directory paths."""
         loop = asyncio.get_event_loop()
         handler = _LogFileHandler(self._queue, loop)
-        self._observer = Observer()
+        self._observer = PollingObserver()
 
         seen_dirs: set[str] = set()
         for pattern in watch_paths:
