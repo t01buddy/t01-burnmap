@@ -119,6 +119,13 @@ def create_app() -> FastAPI:
     except ImportError:
         pass
 
+    try:
+        from burnmap.api.export import router as export_router
+        if export_router is not None:
+            app.include_router(export_router)
+    except ImportError:
+        pass
+
     @app.get("/health", tags=["ops"])
     def health() -> dict:
         return {"status": "ok"}
