@@ -48,8 +48,22 @@ def _collect_watch_paths() -> list[str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start watcher on startup, stop on shutdown."""
-    init_db(get_db())
+    import asyncio
+    db = get_db()
+    init_db(db)
     logger.info("Database initialised")
+
+    # Backfill pre-existing logs on first run (run in thread to avoid blocking event loop)
+    try:
+        from burnmap.api.backfill import run_backfill, is_first_run
+        if is_first_run(db):
+            logger.info("First run detected — starting backfill")
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, run_backfill, db)
+            logger.info("Backfill complete: %s", result)
+    except Exception:
+        logger.exception("Backfill failed on startup")
+
     watcher = Watcher()
     watch_paths = _collect_watch_paths()
     if watch_paths:
