@@ -115,6 +115,26 @@
         </div>
       </div>
 
+      <!-- Data -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card__h">
+          <h3>Data</h3>
+          <span class="meta">JSONL ingestion</span>
+        </div>
+        <div class="card__body">
+          <div class="row">
+            <span>Source: <b class="mono">Claude Code / Codex / Cline / Aider JSONL logs</b></span>
+            <span class="spacer"></span>
+            <span class="mono muted" style="font-size:11px"
+              x-text="backfill ? 'last refresh · ' + backfill.sessions_ingested + ' sessions · ' + backfill.spans_ingested + ' spans' : ''">
+            </span>
+          </div>
+          <div class="row" style="margin-top:12px;gap:8px">
+            <button class="btn btn--primary" @click="refreshData($event)">Refresh data</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Alert thresholds -->
       <div class="card" style="margin-bottom:16px">
         <div class="card__h">
@@ -188,6 +208,7 @@ function settingsPage() {
     storage: null,
     providers: [],
     pricing: null,
+    backfill: null,
     selectedMode: 'preview',
     thresholds: { tool_count: 20, cost_trend: true, sigma: 2 },
     contentModes: [
@@ -207,14 +228,16 @@ function settingsPage() {
         } catch { return null; }
       };
       try {
-        const [stor, prov, price] = await Promise.all([
+        const [stor, prov, price, bf] = await Promise.all([
           safeJson('/api/settings/storage'),
           safeJson('/api/settings/providers'),
           safeJson('/api/settings/pricing'),
+          safeJson('/api/backfill'),
         ]);
         this.storage = stor;
         this.providers = (prov && prov.providers) || [];
         this.pricing = price;
+        this.backfill = bf;
       } finally {
         this.loading = false;
       }
@@ -246,6 +269,27 @@ function settingsPage() {
           btn.textContent = 'Sync pricing';
         } else {
           btn.textContent = 'Error — retry';
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    },
+
+    async refreshData(event) {
+      const btn = event.target;
+      btn.disabled = true;
+      btn.textContent = 'Refreshing…';
+      try {
+        const r = await fetch('/api/backfill/run', { method: 'POST' });
+        if (r.ok) {
+          const data = await r.json();
+          await this.load();
+          btn.textContent = 'Refresh data';
+          console.log('Refreshed', data.spans_ingested, 'new spans');
+        } else {
+          const msg = await r.text().catch(() => r.status);
+          btn.textContent = 'Error — retry';
+          console.error('refreshData failed:', msg);
         }
       } finally {
         btn.disabled = false;
