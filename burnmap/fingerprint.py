@@ -110,6 +110,30 @@ def upsert_prompt(
     return fp
 
 
+def insert_prompt_run(
+    conn: sqlite3.Connection,
+    *,
+    fingerprint_hex: str,
+    session_id: str,
+    turn_id: str | None = None,
+    ts: int = 0,
+    input_tokens: int = 0,
+    cost_usd: float = 0.0,
+) -> None:
+    """Insert a single prompt_run row (idempotent via INSERT OR IGNORE)."""
+    import uuid as _uuid
+    run_id = str(_uuid.uuid4())
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO prompt_runs
+            (id, fingerprint, session_id, turn_id, ts, input_tokens, cost_usd)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (run_id, fingerprint_hex, session_id, turn_id, ts, input_tokens, cost_usd),
+    )
+    conn.commit()
+
+
 def wipe_content(content_conn: sqlite3.Connection) -> int:
     """Delete all rows from prompt_content. Returns deleted row count."""
     cur = content_conn.execute("DELETE FROM prompt_content")
