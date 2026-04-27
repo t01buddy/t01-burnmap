@@ -53,6 +53,13 @@ else:
 _VALID_SORTS = {"cost", "runs", "tokens", "recent"}
 
 
+def _has_table(conn: sqlite3.Connection, name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone()
+    return row is not None
+
+
 def query_prompts(
     conn: sqlite3.Connection,
     *,
@@ -71,12 +78,20 @@ def query_prompts(
     }
     order = order_map[sort]
 
+    has_content = _has_table(conn, "prompt_content")
+    content_join = "LEFT JOIN prompt_content pc ON pc.fingerprint = p.fingerprint" if has_content else ""
+    snippet_expr = "COALESCE(SUBSTR(pc.content, 1, 120), '(no text)')" if has_content else "'(no text)'"
+
     where_clauses: list[str] = []
     params: list[Any] = []
 
     if search:
-        where_clauses.append("(pc.content LIKE ? OR p.fingerprint LIKE ?)")
-        params.extend([f"%{search}%", f"%{search}%"])
+        if has_content:
+            where_clauses.append("(pc.content LIKE ? OR p.fingerprint LIKE ?)")
+            params.extend([f"%{search}%", f"%{search}%"])
+        else:
+            where_clauses.append("p.fingerprint LIKE ?")
+            params.append(f"%{search}%")
 
     if agent:
         where_clauses.append("s.agent = ?")
@@ -88,7 +103,7 @@ def query_prompts(
         f"""
         SELECT
             p.fingerprint                                   AS fingerprint,
-            COALESCE(SUBSTR(pc.content, 1, 120), '(no text)')  AS snippet,
+            {snippet_expr}                                  AS snippet,
             p.run_count                                     AS run_count,
             p.total_tokens                                  AS total_tokens,
             p.total_cost                                    AS total_cost,
@@ -97,7 +112,7 @@ def query_prompts(
             COALESCE(s.agent, '—')                          AS agent,
             COALESCE(MAX(sp.is_outlier), 0)                 AS is_outlier
         FROM prompts p
-        LEFT JOIN prompt_content pc ON pc.fingerprint = p.fingerprint
+        {content_join}
         LEFT JOIN prompt_runs pr ON pr.fingerprint = p.fingerprint
         LEFT JOIN sessions s ON s.id = pr.session_id
         LEFT JOIN spans sp ON sp.session_id = pr.session_id
@@ -117,14 +132,17 @@ def query_prompt_detail(
     fingerprint: str,
 ) -> dict[str, Any] | None:
     """Return prompt detail: text, stats, run histogram, outlier flags, run list."""
+    has_content = _has_table(conn, "prompt_content")
+    content_join = "LEFT JOIN prompt_content pc ON pc.fingerprint = p.fingerprint" if has_content else ""
+    content_expr = "COALESCE(pc.content, '(no text)')" if has_content else "'(no text)'"
     row = conn.execute(
-        """
+        f"""
         SELECT
             p.fingerprint, p.run_count, p.total_tokens, p.total_cost,
             p.first_seen, p.last_seen,
-            COALESCE(pc.content, '(no text)') AS content
+            {content_expr} AS content
         FROM prompts p
-        LEFT JOIN prompt_content pc ON pc.fingerprint = p.fingerprint
+        {content_join}
         WHERE p.fingerprint = ?
         """,
         (fingerprint,),
