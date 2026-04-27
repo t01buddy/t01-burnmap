@@ -192,6 +192,8 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
 
     inserted = 0
     session_ids_seen: set[str] = set()
+    # Track per-session min/max timestamps to populate started_at/ended_at
+    session_ts: dict[str, tuple[int, int]] = {}  # session_id -> (min_ts, max_ts)
 
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -203,12 +205,10 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
             except json.JSONDecodeError:
                 continue
 
-            # Extract session id from common field names
-            session_id = (
-                record.get("sessionId")
-                or record.get("session_id")
-                or str(path)  # fallback: file path as session id
-            )
+            # Extract session id — skip records without a real UUID id (Bug 1 fix)
+            session_id = record.get("sessionId") or record.get("session_id")
+            if not session_id:
+                continue  # drop path-fallback rows; don't materialize dead sessions
 
             # Ensure session row exists (dedup)
             if session_id not in existing_sessions and session_id not in session_ids_seen:
@@ -217,6 +217,15 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
                     (session_id, agent),
                 )
                 session_ids_seen.add(session_id)
+
+            # Accumulate timestamps for Bug 2 fix
+            ts = _ts_ms(record.get("timestamp") or record.get("ts"))
+            if ts:
+                prev = session_ts.get(session_id)
+                if prev is None:
+                    session_ts[session_id] = (ts, ts)
+                else:
+                    session_ts[session_id] = (min(prev[0], ts), max(prev[1], ts))
 
             for span in build_spans_from_record(record, session_id, agent):
                 conn.execute(
@@ -237,12 +246,29 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
                 )
                 inserted += 1
 
+    # Bug 2 fix: update started_at/ended_at from accumulated timestamps
+    for sid, (min_ts, max_ts) in session_ts.items():
+        conn.execute(
+            """UPDATE sessions
+               SET started_at = MIN(CASE WHEN started_at = 0 THEN ? ELSE MIN(started_at, ?) END, ?),
+                   ended_at   = MAX(ended_at, ?)
+               WHERE id = ?""",
+            (min_ts, min_ts, min_ts, max_ts, sid),
+        )
+
     conn.commit()
     return inserted
 
 
 def run_backfill(conn: sqlite3.Connection) -> dict[str, Any]:
     """Ingest all adapter log files. Skip already-ingested sessions. Idempotent."""
+    # One-time cleanup: remove stale path-form session rows (Bug 1 residue)
+    cleaned = conn.execute(
+        "DELETE FROM sessions WHERE id LIKE '/%' OR id LIKE 'C:\\%'"
+    ).rowcount
+    if cleaned:
+        conn.commit()
+
     files = _discover_files()
     total = len(files)
     done = 0
@@ -260,6 +286,7 @@ def run_backfill(conn: sqlite3.Connection) -> dict[str, Any]:
         "files_processed": done,
         "files_total": total,
         "spans_added": spans_added,
+        "stale_sessions_cleaned": cleaned,
         "sessions_ingested": row["s"] if row else 0,
         "spans_ingested": row["sp"] if row else 0,
         "pct": 100 if total == 0 else round(done / total * 100),
