@@ -15,6 +15,7 @@ except ImportError:
     APIRouter = object  # type: ignore[assignment,misc]
 
 from burnmap.db.schema import get_db
+from burnmap.fingerprint import insert_prompt_run, upsert_prompt
 
 if _FASTAPI:
     router = APIRouter()
@@ -182,6 +183,75 @@ def build_spans_from_record(
     return spans
 
 
+def _extract_user_text(record: dict[str, Any]) -> str:
+    """Return the concatenated user-role text from a JSONL record, or ''."""
+    msg = record.get("message") or {}
+    if not isinstance(msg, dict):
+        return ""
+    role = msg.get("role")
+    if role != "user":
+        return ""
+    content = msg.get("content", [])
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text") or ""
+                if text.strip():
+                    parts.append(text.strip())
+        return " ".join(parts)
+    return ""
+
+
+def _ingest_prompt_record(
+    conn: sqlite3.Connection,
+    record: dict[str, Any],
+    session_id: str,
+    agent: str,
+    path: Path,
+) -> None:
+    """Fingerprint a user-role record and write to prompts + prompt_runs."""
+    text = _extract_user_text(record)
+    if not text:
+        return
+
+    try:
+        from burnmap.api.content import get_content_mode
+        content_mode = get_content_mode()
+    except Exception:
+        content_mode = "fingerprint_only"
+
+    # Derive project name from the grandparent directory of the JSONL file
+    project = path.parent.name if path.parent else ""
+
+    ts = _ts_ms(record.get("timestamp") or record.get("ts"))
+    turn_id = record.get("uuid") or record.get("id")
+    usage = record.get("usage") or {}
+    input_tokens = int(usage.get("input_tokens") or 0)
+    cost_usd = float(record.get("costUSD") or record.get("cost_usd") or 0.0)
+
+    fp = upsert_prompt(
+        conn,
+        text=text,
+        input_tokens=input_tokens,
+        cost_usd=cost_usd,
+        agent=agent,
+        project=project,
+        content_mode=content_mode,
+    )
+    insert_prompt_run(
+        conn,
+        fingerprint_hex=fp,
+        session_id=session_id,
+        turn_id=turn_id,
+        ts=ts,
+        input_tokens=input_tokens,
+        cost_usd=cost_usd,
+    )
+
+
 def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
     """Parse a JSONL file and insert sessions/spans. Return spans inserted."""
     import json
@@ -226,6 +296,12 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
                     session_ts[session_id] = (ts, ts)
                 else:
                     session_ts[session_id] = (min(prev[0], ts), max(prev[1], ts))
+
+            # Prompt ingestion: extract user-role text blocks and fingerprint them
+            try:
+                _ingest_prompt_record(conn, record, session_id, agent, path)
+            except Exception:
+                pass  # prompts table may not exist on legacy schema
 
             for span in build_spans_from_record(record, session_id, agent):
                 conn.execute(
@@ -282,6 +358,12 @@ def run_backfill(conn: sqlite3.Connection) -> dict[str, Any]:
     row = conn.execute(
         "SELECT COUNT(DISTINCT session_id) AS s, COUNT(*) AS sp FROM spans"
     ).fetchone()
+    try:
+        prompt_row = conn.execute(
+            "SELECT COUNT(*) AS p, (SELECT COUNT(*) FROM prompt_runs) AS pr FROM prompts"
+        ).fetchone()
+    except Exception:
+        prompt_row = None
     return {
         "files_processed": done,
         "files_total": total,
@@ -289,6 +371,8 @@ def run_backfill(conn: sqlite3.Connection) -> dict[str, Any]:
         "stale_sessions_cleaned": cleaned,
         "sessions_ingested": row["s"] if row else 0,
         "spans_ingested": row["sp"] if row else 0,
+        "prompts_ingested": prompt_row["p"] if prompt_row else 0,
+        "prompt_runs_ingested": prompt_row["pr"] if prompt_row else 0,
         "pct": 100 if total == 0 else round(done / total * 100),
     }
 
