@@ -39,6 +39,18 @@ if _FASTAPI:
     def pricing_info() -> JSONResponse:
         return JSONResponse(query_pricing_info())
 
+    @router.post("/api/settings/sync-pricing")
+    def sync_pricing() -> JSONResponse:
+        from burnmap.pricing import sync_pricing_yaml
+        msg = sync_pricing_yaml()
+        if "network error" in msg or "not installed" in msg:
+            return JSONResponse({"ok": False, "message": msg}, status_code=500)
+        # Extract model count from message: "wrote N models to ..."
+        import re
+        m = re.search(r"wrote (\d+) models", msg)
+        model_count = int(m.group(1)) if m else 0
+        return JSONResponse({"ok": True, "model_count": model_count, "message": msg})
+
 else:
     router = None  # type: ignore[assignment]
 
