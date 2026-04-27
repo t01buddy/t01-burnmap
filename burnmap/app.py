@@ -116,6 +116,10 @@ def create_app() -> FastAPI:
     except ImportError:
         pass
 
+    @app.get("/health", tags=["ops"])
+    def health() -> dict:
+        return {"status": "ok"}
+
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
