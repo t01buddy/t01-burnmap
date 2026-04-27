@@ -41,10 +41,9 @@ def _collect_watch_paths() -> list[str]:
             paths.extend(str(p) for p in adapter.default_paths())
     except ImportError:
         logger.warning(
-            "Adapter imports failed; falling back to Claude Code default path. "
-            "Install or fix burnmap.adapters to watch all agent logs."
+            "Adapter imports failed; no paths will be watched. "
+            "Install or fix burnmap.adapters to watch agent logs."
         )
-        paths.append(str(Path.home() / ".claude" / "projects"))
     return paths
 
 
