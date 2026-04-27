@@ -77,5 +77,9 @@ if _FASTAPI:
     def onboarding(request: Request) -> HTMLResponse:
         return _html(request, "onboarding.html")
 
+    @router.get("/settings/provider/{agent}", response_class=HTMLResponse)
+    def provider_detail(request: Request, agent: str) -> HTMLResponse:
+        return _html(request, "pages/provider_detail.html", agent=agent)
+
 else:
     router = None  # type: ignore[assignment]
