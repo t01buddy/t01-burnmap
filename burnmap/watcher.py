@@ -67,6 +67,10 @@ class Watcher:
                 concrete.append(part)
             watch_dir = Path(*concrete) if concrete else Path.home()
 
+            # If the resolved path is a file, watch its parent directory
+            if watch_dir.is_file():
+                watch_dir = watch_dir.parent
+
             if not watch_dir.exists():
                 logger.debug("Skipping non-existent watch path: %s", watch_dir)
                 continue
