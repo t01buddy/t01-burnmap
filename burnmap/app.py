@@ -16,6 +16,7 @@ from burnmap.api import (
     overview_router,
 )
 from burnmap.api.events import router as events_router
+from burnmap.db import get_db, init_db
 from burnmap.watcher import Watcher
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,8 @@ def _collect_watch_paths() -> list[str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start watcher on startup, stop on shutdown."""
+    init_db(get_db())
+    logger.info("Database initialised")
     watcher = Watcher()
     watch_paths = _collect_watch_paths()
     if watch_paths:
