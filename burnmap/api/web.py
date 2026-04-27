@@ -5,7 +5,7 @@ from pathlib import Path
 
 try:
     from fastapi import APIRouter, Request
-    from fastapi.responses import HTMLResponse
+    from fastapi.responses import HTMLResponse, Response
     from fastapi.templating import Jinja2Templates
     _FASTAPI = True
 except ImportError:
@@ -34,6 +34,10 @@ if _FASTAPI:
 
     def _html(request: Request, template: str, **ctx: object) -> HTMLResponse:
         return templates.TemplateResponse(request, template, ctx)
+
+    @router.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> Response:
+        return Response(status_code=204)
 
     @router.get("/", response_class=HTMLResponse)
     def index(request: Request) -> HTMLResponse:
