@@ -14,9 +14,23 @@ except ImportError:
 
 _templates_dir = Path(__file__).parent.parent / "templates"
 
+def _format_tok(value: int) -> str:
+    """Format token count: 1_234 → '1.2k', <1000 → plain number."""
+    if value >= 1000:
+        return f"{value / 1000:.1f}k"
+    return str(value)
+
+
+def _format_cost(value: float) -> str:
+    """Format cost in dollars: '$0.0042'."""
+    return f"${value:.4f}"
+
+
 if _FASTAPI:
     router = APIRouter()
     templates = Jinja2Templates(directory=str(_templates_dir))
+    templates.env.filters["format_tok"] = _format_tok
+    templates.env.filters["format_cost"] = _format_cost
 
     def _html(request: Request, template: str, **ctx: object) -> HTMLResponse:
         return templates.TemplateResponse(request, template, ctx)
