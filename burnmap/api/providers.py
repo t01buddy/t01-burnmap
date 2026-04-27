@@ -25,6 +25,11 @@ if _FASTAPI:
         finally:
             conn.close()
 
+    @router.get("/api/providers")
+    def providers_list() -> JSONResponse:
+        """Return all discovered providers for the topbar agent filter."""
+        return JSONResponse({"providers": discover_adapters()})
+
     @router.get("/api/providers/{agent}")
     def provider_detail(agent: str, db: sqlite3.Connection = Depends(_db)) -> JSONResponse:
         """Return config + stats + recent sessions for a single provider."""
