@@ -115,9 +115,6 @@
     <!-- Rail footer: live tailer pulse indicator -->
     <div class="rail__footer">
       <div><span class="dot pulse-dot"></span>localhost:7820 · <span style="color:#22c55e">connected</span></div>
-      <div class="mono" style="font-size:10px" x-text="footerMeta"></div>
-      <div x-text="footerDb"></div>
-      <div>content mode: <b x-text="contentMode"></b></div>
     </div>
   </aside>
 
@@ -180,9 +177,6 @@ function shell() {
       { id: 'aider',      label: 'Aider' },
     ],
     showBanner: true,
-    contentMode: 'preview',
-    footerMeta: 'last event: — · 0 evt/s',
-    footerDb: 'db — · wal mode',
 
     init() {
       // Derive active page from URL path
@@ -192,8 +186,6 @@ function shell() {
       // Expose agentFilter globally so page scripts can read it
       window.__burnmapShell = this;
 
-      // Poll status endpoint if available
-      this._pollStatus();
     },
 
     setAgentFilter(id) {
@@ -202,19 +194,6 @@ function shell() {
       window.dispatchEvent(new CustomEvent('burnmap:agent-filter', { detail: id }));
     },
 
-    async _pollStatus() {
-      try {
-        const r = await fetch('/api/status');
-        if (!r.ok) return;
-        const d = await r.json();
-        if (d.db_size_mb != null) this.footerDb = 'db ' + d.db_size_mb.toFixed(1) + ' MB · wal mode';
-        if (d.content_mode != null) this.contentMode = d.content_mode;
-        if (d.events_per_sec != null) this.footerMeta = 'last event: ' + (d.last_event_ago || '—') + ' · ' + d.events_per_sec.toFixed(1) + ' evt/s';
-      } catch (_) {
-        // status endpoint not yet available — silent
-      }
-      setTimeout(() => this._pollStatus(), 10000);
-    },
   };
 }
 </script>
