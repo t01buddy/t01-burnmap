@@ -26,11 +26,11 @@ def _collect_watch_paths() -> list[str]:
     """Gather default_paths from all known adapters."""
     paths: list[str] = []
     try:
-        from t01_burnmap.adapters.registry import AdapterRegistry
-        from t01_burnmap.adapters.claude_code import ClaudeCodeAdapter
-        from t01_burnmap.adapters.codex import CodexAdapter
-        from t01_burnmap.adapters.cline import ClineAdapter
-        from t01_burnmap.adapters.aider import AiderAdapter
+        from burnmap.adapters.registry import AdapterRegistry
+        from burnmap.adapters.claude_code import ClaudeCodeAdapter
+        from burnmap.adapters.codex import CodexAdapter
+        from burnmap.adapters.cline import ClineAdapter
+        from burnmap.adapters.aider import AiderAdapter
         registry = AdapterRegistry()
         registry.register("claude_code", ClaudeCodeAdapter)
         registry.register("codex", CodexAdapter)
