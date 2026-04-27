@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
         from burnmap.api.backfill import run_backfill, is_first_run
         if is_first_run(db):
             logger.info("First run detected — starting backfill")
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(None, run_backfill, db)
             logger.info("Backfill complete: %s", result)
     except Exception:

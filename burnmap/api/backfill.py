@@ -67,15 +67,26 @@ _ADAPTER_PATHS: dict[str, list[Path]] = {
 _LOG_EXTENSIONS = {".jsonl", ".json", ".log", ".md"}
 
 
+_MAX_DISCOVER_DEPTH = 6
+
+
 def _discover_files() -> list[tuple[str, Path]]:
-    """Return (agent, path) pairs for all discoverable log files."""
+    """Return (agent, path) pairs for all discoverable log files.
+
+    Limits recursion to _MAX_DISCOVER_DEPTH levels to avoid hanging on
+    large directories (e.g. ~/.claude/projects with thousands of entries).
+    """
     found: list[tuple[str, Path]] = []
     for agent, dirs in _ADAPTER_PATHS.items():
         for d in dirs:
-            if d.is_dir():
-                for p in d.rglob("*"):
-                    if p.is_file() and p.suffix in _LOG_EXTENSIONS:
-                        found.append((agent, p))
+            if not d.is_dir():
+                continue
+            base_depth = len(d.parts)
+            for p in d.rglob("*"):
+                if len(p.parts) - base_depth > _MAX_DISCOVER_DEPTH:
+                    continue
+                if p.is_file() and p.suffix in _LOG_EXTENSIONS:
+                    found.append((agent, p))
     return found
 
 
