@@ -53,11 +53,15 @@ else:
 _VALID_SORTS = {"cost", "runs", "tokens", "recent"}
 
 
-def _has_table(conn: sqlite3.Connection, name: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
-    ).fetchone()
-    return row is not None
+def _has_content_db(conn: sqlite3.Connection) -> bool:
+    """Return True if the content DB is attached and has the prompt_content table."""
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM content_db.sqlite_master WHERE type='table' AND name='prompt_content'"
+        ).fetchone()
+        return row is not None
+    except sqlite3.OperationalError:
+        return False
 
 
 def query_prompts(
@@ -78,8 +82,8 @@ def query_prompts(
     }
     order = order_map[sort]
 
-    has_content = _has_table(conn, "prompt_content")
-    content_join = "LEFT JOIN prompt_content pc ON pc.fingerprint = p.fingerprint" if has_content else ""
+    has_content = _has_content_db(conn)
+    content_join = "LEFT JOIN content_db.prompt_content pc ON pc.fingerprint = p.fingerprint" if has_content else ""
     snippet_expr = "COALESCE(SUBSTR(pc.content, 1, 120), '(no text)')" if has_content else "'(no text)'"
 
     where_clauses: list[str] = []
@@ -132,8 +136,8 @@ def query_prompt_detail(
     fingerprint: str,
 ) -> dict[str, Any] | None:
     """Return prompt detail: text, stats, run histogram, outlier flags, run list."""
-    has_content = _has_table(conn, "prompt_content")
-    content_join = "LEFT JOIN prompt_content pc ON pc.fingerprint = p.fingerprint" if has_content else ""
+    has_content = _has_content_db(conn)
+    content_join = "LEFT JOIN content_db.prompt_content pc ON pc.fingerprint = p.fingerprint" if has_content else ""
     content_expr = "COALESCE(pc.content, '(no text)')" if has_content else "'(no text)'"
     row = conn.execute(
         f"""
