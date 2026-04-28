@@ -107,13 +107,21 @@ _CONTENT_SCHEMA_SQL = """
 
 
 def get_db(path: str | Path | None = None) -> sqlite3.Connection:
-    """Return an open WAL-mode SQLite connection (main DB)."""
+    """Return an open WAL-mode SQLite connection (main DB).
+
+    If the content DB file exists it is attached as ``content_db`` so that
+    ``prompt_content`` is reachable via JOIN without a separate connection.
+    The attachment is optional — deleting the file reverts queries to '(no text)'.
+    """
     db_path = Path(path) if path else _DEFAULT_DB
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    content_db_path = _CONTENT_DB if path is None else Path(path).parent / "content.db"
+    if content_db_path.exists():
+        conn.execute(f"ATTACH DATABASE ? AS content_db", (str(content_db_path),))
     return conn
 
 
