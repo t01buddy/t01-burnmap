@@ -16,6 +16,7 @@ except ImportError:
 
 from burnmap.db.schema import get_db
 from burnmap.fingerprint import insert_prompt_run, upsert_prompt
+from burnmap.pricing import compute_cost, lookup_rates
 
 if _FASTAPI:
     router = APIRouter()
@@ -135,9 +136,17 @@ def build_spans_from_record(
     turn_id = record.get("uuid") or record.get("id") or str(uuid.uuid4())
     input_tokens = int(usage.get("input_tokens") or 0)
     output_tokens = int(usage.get("output_tokens") or 0)
+    cache_read_tokens = int(
+        usage.get("cache_read_input_tokens") or usage.get("cached_tokens") or 0
+    )
     cost = float(record.get("costUSD") or record.get("cost_usd") or 0.0)
+    model = record.get("model") or ""
     ts = _ts_ms(record.get("timestamp") or record.get("ts"))
     turn_name = record.get("name") or "turn"
+
+    # Compute cost from tokens when the log doesn't record it directly
+    if cost == 0.0 and (input_tokens or output_tokens) and model:
+        cost = compute_cost(model, input_tokens, output_tokens, cache_read_tokens)
 
     spans: list[dict[str, Any]] = [{
         "id": turn_id,

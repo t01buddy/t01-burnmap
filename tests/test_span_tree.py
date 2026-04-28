@@ -132,6 +132,26 @@ class TestBuildSpansFromRecord:
         spans = build_spans_from_record(rec, "sess-1", "claude_code")
         assert spans == []
 
+    def test_cost_computed_from_tokens_when_zero(self):
+        """When costUSD=0 but tokens+model present, compute_cost fills cost_usd."""
+        rec = self._record(costUSD=0.0, model="claude-3-5-sonnet-20241022")
+        rec["usage"] = {"input_tokens": 1000, "output_tokens": 500}
+        spans = build_spans_from_record(rec, "sess-1", "claude_code")
+        assert spans[0]["cost_usd"] > 0.0
+
+    def test_cost_not_overridden_when_nonzero(self):
+        """When costUSD is already set, don't override it."""
+        rec = self._record(costUSD=0.05, model="claude-3-5-sonnet-20241022")
+        spans = build_spans_from_record(rec, "sess-1", "claude_code")
+        assert spans[0]["cost_usd"] == 0.05
+
+    def test_cost_zero_when_no_model(self):
+        """When model is missing, cost stays 0 (no spurious fallback pricing)."""
+        rec = self._record(costUSD=0.0)
+        rec["usage"] = {"input_tokens": 1000, "output_tokens": 500}
+        spans = build_spans_from_record(rec, "sess-1", "claude_code")
+        assert spans[0]["cost_usd"] == 0.0
+
 
 # ── Tree reconstruction from fixture JSONL ──────────────────────────────────
 
