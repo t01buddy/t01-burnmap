@@ -228,16 +228,18 @@ function settingsPage() {
         } catch { return null; }
       };
       try {
-        const [stor, prov, price, bf] = await Promise.all([
+        const [stor, prov, price, bf, cm] = await Promise.all([
           safeJson('/api/settings/storage'),
           safeJson('/api/settings/providers'),
           safeJson('/api/settings/pricing'),
           safeJson('/api/backfill'),
+          safeJson('/api/content/mode'),
         ]);
         this.storage = stor;
         this.providers = (prov && prov.providers) || [];
         this.pricing = price;
         this.backfill = bf;
+        if (cm && cm.mode) this.selectedMode = cm.mode;
       } finally {
         this.loading = false;
       }
@@ -248,14 +250,23 @@ function settingsPage() {
       return [{ label: 'PATH', value: this.storage.path }];
     },
 
-    applyMode() {
-      // POST to /api/settings/content-mode when backend endpoint exists
-      console.log('apply content mode:', this.selectedMode);
+    async applyMode() {
+      const r = await fetch('/api/settings/content-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: this.selectedMode }),
+      });
+      if (!r.ok) alert('Failed to apply content mode.');
     },
 
-    wipeContent() {
+    async wipeContent() {
       if (!confirm('Wipe all stored prompt content? This cannot be undone.')) return;
-      console.log('wipe content');
+      const r = await fetch('/api/wipe', { method: 'POST' });
+      if (r.ok) {
+        await this.load();
+      } else {
+        alert('Wipe failed.');
+      }
     },
 
     async syncPricing() {
