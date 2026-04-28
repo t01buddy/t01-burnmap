@@ -53,15 +53,24 @@ else:
 _VALID_SORTS = {"cost", "runs", "tokens", "recent"}
 
 
-def _has_content_db(conn: sqlite3.Connection) -> bool:
-    """Return True if the content DB is attached and has the prompt_content table."""
+def _get_content_table_ref(conn: sqlite3.Connection) -> str | None:
+    """Return 'prompt_content' if in main DB, 'content_db.prompt_content' if attached, else None."""
+    # Check main DB first (for tests and fallback)
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='prompt_content'"
+    ).fetchone()
+    if row is not None:
+        return "prompt_content"
+    # Check attached content_db (production)
     try:
         row = conn.execute(
             "SELECT 1 FROM content_db.sqlite_master WHERE type='table' AND name='prompt_content'"
         ).fetchone()
-        return row is not None
+        if row is not None:
+            return "content_db.prompt_content"
     except sqlite3.OperationalError:
-        return False
+        pass
+    return None
 
 
 def query_prompts(
@@ -82,15 +91,15 @@ def query_prompts(
     }
     order = order_map[sort]
 
-    has_content = _has_content_db(conn)
-    content_join = "LEFT JOIN content_db.prompt_content pc ON pc.fingerprint = p.fingerprint" if has_content else ""
-    snippet_expr = "COALESCE(SUBSTR(pc.content, 1, 120), '(no text)')" if has_content else "'(no text)'"
+    content_tbl = _get_content_table_ref(conn)
+    content_join = f"LEFT JOIN {content_tbl} pc ON pc.fingerprint = p.fingerprint" if content_tbl else ""
+    snippet_expr = "COALESCE(SUBSTR(pc.content, 1, 120), '(no text)')" if content_tbl else "'(no text)'"
 
     where_clauses: list[str] = []
     params: list[Any] = []
 
     if search:
-        if has_content:
+        if content_tbl:
             where_clauses.append("(pc.content LIKE ? OR p.fingerprint LIKE ?)")
             params.extend([f"%{search}%", f"%{search}%"])
         else:
@@ -136,9 +145,9 @@ def query_prompt_detail(
     fingerprint: str,
 ) -> dict[str, Any] | None:
     """Return prompt detail: text, stats, run histogram, outlier flags, run list."""
-    has_content = _has_content_db(conn)
-    content_join = "LEFT JOIN content_db.prompt_content pc ON pc.fingerprint = p.fingerprint" if has_content else ""
-    content_expr = "COALESCE(pc.content, '(no text)')" if has_content else "'(no text)'"
+    content_tbl = _get_content_table_ref(conn)
+    content_join = f"LEFT JOIN {content_tbl} pc ON pc.fingerprint = p.fingerprint" if content_tbl else ""
+    content_expr = "COALESCE(pc.content, '(no text)')" if content_tbl else "'(no text)'"
     row = conn.execute(
         f"""
         SELECT
