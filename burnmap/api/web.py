@@ -40,7 +40,16 @@ if _FASTAPI:
         return Response(status_code=204)
 
     @router.get("/", response_class=HTMLResponse)
-    def index(request: Request) -> HTMLResponse:
+    def index(request: Request) -> Response:
+        from burnmap.db.schema import get_db
+        from burnmap.api.backfill import is_first_run
+        from fastapi.responses import RedirectResponse
+        db = get_db()
+        try:
+            if is_first_run(db):
+                return RedirectResponse("/onboarding")
+        finally:
+            db.close()
         return _html(request, "pages/sessions.html")
 
     @router.get("/overview", response_class=HTMLResponse)

@@ -71,6 +71,13 @@
     .skip-link:hover { color: #666; }
 
     .loading-msg { text-align: center; color: #aaa; font-size: 13px; padding: 20px 0; }
+
+    /* Pricing status row */
+    .pricing-row { display: flex; align-items: center; gap: 10px; font-size: 13px; margin-bottom: 20px; }
+    .pricing-label { font-weight: 600; flex: 1; }
+    .badge-syncing { font-size: 10px; background: #fff8e1; color: #e65c00; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
+    .badge-synced  { font-size: 10px; background: #e8f8ef; color: #27ae60; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
+    .badge-failed  { font-size: 10px; background: #fdecea; color: #c0392b; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -116,6 +123,14 @@
         </div>
       </div>
 
+      <div class="pricing-row">
+        <span class="adapter-dot" :class="pricingStatus === 'synced' ? 'dot-found' : (pricingStatus === 'failed' ? 'dot-missing' : 'dot-missing')"></span>
+        <span class="pricing-label">Pricing data</span>
+        <span x-show="pricingStatus === 'syncing'" class="badge-syncing">syncing…</span>
+        <span x-show="pricingStatus === 'synced'" class="badge-synced" x-text="'synced — ' + pricingModels + ' models'"></span>
+        <span x-show="pricingStatus === 'failed'" class="badge-failed">failed — retry in Settings</span>
+      </div>
+
       <button class="cta-btn"
               @click="runBackfill()"
               :disabled="backfilling || adapters.filter(a => a.found).length === 0"
@@ -143,7 +158,10 @@ function onboardingPage() {
     progress: { percent_complete: 0, sessions_ingested: 0, spans_ingested: 0, log_files_found: 0 },
     backfilling: false,
     backfillDone: false,
+    pricingStatus: 'syncing',  // 'syncing' | 'synced' | 'failed'
+    pricingModels: 0,
     _pollTimer: null,
+    _pricingTimer: null,
 
     async load() {
       this.loading = true;
@@ -159,6 +177,26 @@ function onboardingPage() {
         if (pData.percent_complete >= 100) this.backfillDone = true;
       } finally {
         this.loading = false;
+      }
+      this._pollPricing();
+    },
+
+    async _pollPricing() {
+      const check = async () => {
+        try {
+          const res = await fetch('/api/settings/pricing');
+          if (!res.ok) { this.pricingStatus = 'failed'; return; }
+          const data = await res.json();
+          if (data && data.last_synced) {
+            this.pricingStatus = 'synced';
+            this.pricingModels = data.model_count || 0;
+            clearInterval(this._pricingTimer);
+          }
+        } catch (_) { /* keep polling */ }
+      };
+      await check();
+      if (this.pricingStatus === 'syncing') {
+        this._pricingTimer = setInterval(check, 2000);
       }
     },
 
@@ -183,7 +221,9 @@ function onboardingPage() {
     },
 
     openDashboard() {
-      window.location.href = '/';
+      clearInterval(this._pollTimer);
+      clearInterval(this._pricingTimer);
+      window.location.href = '/overview';
     },
   };
 }

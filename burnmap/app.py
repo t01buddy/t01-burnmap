@@ -55,13 +55,29 @@ async def lifespan(app: FastAPI):
     init_db(db)
     logger.info("Database initialised")
 
-    # Backfill pre-existing logs on first run (run in thread to avoid blocking event loop)
+    # Backfill + pricing sync on first run (concurrent threads, non-blocking)
     try:
         from burnmap.api.backfill import run_backfill, is_first_run
         if is_first_run(db):
-            logger.info("First run detected — starting backfill")
+            logger.info("First run detected — starting backfill + pricing sync")
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(None, run_backfill, db)
+            from concurrent.futures import ThreadPoolExecutor
+            from burnmap.pricing import sync_pricing_yaml
+
+            def _pricing_sync() -> str:
+                try:
+                    result = sync_pricing_yaml()
+                    logger.info("Pricing sync complete: %s", result)
+                    return result
+                except Exception:
+                    logger.exception("Pricing sync failed on startup")
+                    return "failed"
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                backfill_fut = loop.run_in_executor(pool, run_backfill, db)
+                pricing_fut = loop.run_in_executor(pool, _pricing_sync)
+                result = await backfill_fut
+                await pricing_fut
             logger.info("Backfill complete: %s", result)
     except Exception:
         logger.exception("Backfill failed on startup")
