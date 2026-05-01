@@ -2,27 +2,39 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
 
 _CONFIG_PATH = Path.home() / ".t01-burnmap" / "content_mode.json"
-_VALID_MODES = ("off", "fingerprint_only", "preview", "full")
+_VALID_MODES = ("preview", "full")
+_LEGACY_MODES = frozenset({"off", "fingerprint_only"})
+
+logger = logging.getLogger(__name__)
 
 
 def get_content_mode() -> str:
-    """Read the global content mode from disk (default: fingerprint_only)."""
+    """Read the global content mode from disk (default: preview).
+
+    Legacy values 'off' and 'fingerprint_only' are silently migrated to 'preview'.
+    """
     try:
         data = json.loads(_CONFIG_PATH.read_text())
-        mode = data.get("mode", "fingerprint_only")
-        return mode if mode in _VALID_MODES else "fingerprint_only"
+        mode = data.get("mode", "preview")
+        if mode in _LEGACY_MODES:
+            logger.info("content mode %r is legacy — migrating to 'preview'", mode)
+            set_content_mode("preview")
+            return "preview"
+        return mode if mode in _VALID_MODES else "preview"
     except (FileNotFoundError, json.JSONDecodeError):
-        return "fingerprint_only"
+        return "preview"
 
 
 def set_content_mode(mode: str) -> None:
     """Persist the global content mode to disk."""
     if mode not in _VALID_MODES:
-        raise ValueError(f"Invalid mode {mode!r}. Choose from: {_VALID_MODES}")
+        legacy_hint = " (legacy value — use 'preview' or 'full')" if mode in _LEGACY_MODES else ""
+        raise ValueError(f"Invalid mode {mode!r}{legacy_hint}. Choose from: {_VALID_MODES}")
     _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     _CONFIG_PATH.write_text(json.dumps({"mode": mode}))
 
