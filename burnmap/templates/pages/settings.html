@@ -212,10 +212,8 @@ function settingsPage() {
     selectedMode: 'preview',
     thresholds: { tool_count: 20, cost_trend: true, sigma: 2 },
     contentModes: [
-      { key: 'off', desc: 'Fingerprints disabled. Pure totals only.' },
-      { key: 'fingerprint_only', desc: 'SHA-256 hashes only. No text.' },
-      { key: 'preview', desc: 'First 160 chars + fingerprint.' },
-      { key: 'full', desc: 'Full prompt text stored locally.' },
+      { key: 'preview', desc: 'First 5 words of each prompt + fingerprint. Default.' },
+      { key: 'full',    desc: 'Complete prompt text stored locally + fingerprint.' },
     ],
 
     async load() {

@@ -177,13 +177,11 @@ function shell() {
       { id: 'aider',      label: 'Aider' },
     ],
     showBanner: true,
-    contentModeBannerText: 'Content mode: fingerprint_only — prompt text is NOT stored. Change in Settings to enable.',
+    contentModeBannerText: 'Content mode: preview — first 5 words of each prompt are stored locally.',
 
     _contentModeBannerMessages: {
-      'off':              'Content mode: off — prompt text collection is disabled.',
-      'fingerprint_only': 'Content mode: fingerprint_only — prompt text is NOT stored. Change in Settings to enable.',
-      'preview':          'Content mode: preview — first 512 chars of each prompt are stored locally and never sent to any remote service.',
-      'full':             'Content mode: full — prompt text is stored locally and never sent to any remote service.',
+      'preview': 'Content mode: preview — first 5 words of each prompt are stored locally.',
+      'full':    'Content mode: full — complete prompt text is stored locally and never sent remotely.',
     },
 
     async init() {

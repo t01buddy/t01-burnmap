@@ -1,10 +1,8 @@
 """Prompt fingerprinting and content-mode helpers for t01-burnmap.
 
 Content modes:
-  off              – no text stored, fingerprint still computed
-  fingerprint_only – SHA-256 hex digest only (default)
-  preview          – first 160 chars of normalized text
-  full             – complete normalized text stored in prompt_content
+  preview – first 5 words of normalized text + SHA-256 fingerprint (default)
+  full    – complete normalized text stored in prompt_content
 """
 from __future__ import annotations
 
@@ -13,8 +11,8 @@ import re
 import sqlite3
 import time
 
-_CONTENT_MODES = frozenset({"off", "fingerprint_only", "preview", "full"})
-_PREVIEW_LEN = 160
+_CONTENT_MODES = frozenset({"preview", "full"})
+_PREVIEW_WORDS = 5
 
 
 def normalize(text: str) -> str:
@@ -28,16 +26,13 @@ def fingerprint(text: str) -> str:
 
 
 def content_for_mode(text: str, mode: str) -> str | None:
-    """Return the content to store given a content mode.
-
-    Returns None for 'off' and 'fingerprint_only' (nothing to store).
-    """
+    """Return the content to store given a content mode."""
+    normalized = normalize(text)
     if mode == "preview":
-        normalized = normalize(text)
-        return normalized[:_PREVIEW_LEN]
+        return " ".join(normalized.split()[:_PREVIEW_WORDS])
     if mode == "full":
-        return normalize(text)
-    return None
+        return normalized
+    return None  # unreachable after validation, but defensive
 
 
 def upsert_prompt(
@@ -48,7 +43,7 @@ def upsert_prompt(
     cost_usd: float = 0.0,
     agent: str = "",
     project: str = "",
-    content_mode: str = "fingerprint_only",
+    content_mode: str = "preview",
     content_conn: sqlite3.Connection | None = None,
 ) -> str:
     """Upsert a prompt row and optionally store content.

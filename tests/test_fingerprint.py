@@ -69,21 +69,18 @@ class TestFingerprint:
 # ── content_for_mode ────────────────────────────────────────────────────────
 
 class TestContentForMode:
-    def test_off_returns_none(self):
-        assert content_for_mode("hello", "off") is None
-
-    def test_fingerprint_only_returns_none(self):
-        assert content_for_mode("hello", "fingerprint_only") is None
-
-    def test_preview_returns_first_160_chars(self):
-        text = "a" * 200
+    def test_preview_returns_first_5_words(self):
+        text = "one two three four five six seven"
         result = content_for_mode(text, "preview")
-        assert result is not None
-        assert len(result) == 160
+        assert result == "one two three four five"
 
     def test_preview_short_text(self):
         result = content_for_mode("short text", "preview")
         assert result == "short text"
+
+    def test_preview_whitespace_normalized(self):
+        result = content_for_mode("  a   b  c  d  e  f  ", "preview")
+        assert result == "a b c d e"
 
     def test_full_returns_normalized(self):
         result = content_for_mode("  Hello World  ", "full")
@@ -121,22 +118,12 @@ class TestUpsertPrompt:
         assert "proj_a" in projects
         assert "proj_b" in projects
 
-    def test_mode_off_no_content(self, db, content_db):
-        upsert_prompt(db, text="secret", content_mode="off", content_conn=content_db)
-        row = content_db.execute("SELECT * FROM prompt_content").fetchone()
-        assert row is None
-
-    def test_mode_fingerprint_only_no_content(self, db, content_db):
-        upsert_prompt(db, text="secret", content_mode="fingerprint_only", content_conn=content_db)
-        row = content_db.execute("SELECT * FROM prompt_content").fetchone()
-        assert row is None
-
-    def test_mode_preview_stores_160(self, db, content_db):
-        text = "x" * 300
+    def test_mode_preview_stores_first_5_words(self, db, content_db):
+        text = "one two three four five six seven eight nine ten"
         upsert_prompt(db, text=text, content_mode="preview", content_conn=content_db)
         row = content_db.execute("SELECT content FROM prompt_content").fetchone()
         assert row is not None
-        assert len(row["content"]) == 160
+        assert row["content"] == "one two three four five"
 
     def test_mode_full_stores_full(self, db, content_db):
         text = "  Hello World  "
