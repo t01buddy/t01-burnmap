@@ -16,6 +16,6 @@ Nine scenarios driving the v1 feature set.
 
 - **Duplicate-prompt discovery.** Same prompt typed 23 times this month. Convert into slash command or skill.
 
-- **Privacy wipe.** `t01-burnmap content wipe` clears stored prompt text, keeps fingerprints and aggregates.
+- **Privacy wipe.** `t01-burnmap content wipe` clears stored prompt snippets (preview text or full text), keeps fingerprints and aggregates intact.
 
 - **First-run setup.** Install via `pipx install t01-burnmap`, run `t01-burnmap serve`. Onboarding screen discovers adapters, backfills pre-existing JSONL, lands on Overview.
