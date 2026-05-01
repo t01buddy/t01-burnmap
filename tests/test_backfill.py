@@ -45,6 +45,25 @@ def conn(tmp_path):
             ended_at INTEGER DEFAULT 0,
             is_outlier INTEGER DEFAULT 0
         );
+        CREATE TABLE prompts (
+            fingerprint TEXT PRIMARY KEY,
+            first_seen INTEGER DEFAULT 0,
+            last_seen INTEGER DEFAULT 0,
+            run_count INTEGER DEFAULT 0,
+            total_tokens INTEGER DEFAULT 0,
+            total_cost REAL DEFAULT 0.0,
+            agents TEXT DEFAULT '',
+            projects TEXT DEFAULT ''
+        );
+        CREATE TABLE prompt_runs (
+            id TEXT PRIMARY KEY,
+            fingerprint TEXT NOT NULL REFERENCES prompts(fingerprint),
+            session_id TEXT NOT NULL REFERENCES sessions(id),
+            turn_id TEXT,
+            ts INTEGER DEFAULT 0,
+            input_tokens INTEGER DEFAULT 0,
+            cost_usd REAL DEFAULT 0.0
+        );
     """)
     return db
 
@@ -65,6 +84,14 @@ def _make_turn(session_id: str, uid: str | None = None, input_tokens: int = 100)
             "usage": {"input_tokens": input_tokens, "output_tokens": 50},
         },
         "costUSD": 0.01,
+    }
+
+
+def _make_user(session_id: str, text: str = "hello world", uid: str | None = None) -> dict:
+    return {
+        "uuid": uid or str(uuid.uuid4()),
+        "sessionId": session_id,
+        "message": {"role": "user", "content": [{"type": "text", "text": text}]},
     }
 
 
@@ -123,6 +150,63 @@ class TestIngestJsonlFile:
         p.write_text('{"valid": 1, "sessionId": "s1", "message": {"usage": {"input_tokens": 10, "output_tokens": 5}}}\nnot-json\n')
         count = _ingest_jsonl_file(conn, "claude_code", p)
         assert count == 1
+
+
+# ── Prompt pairing (tokens/cost from assistant record) ────────────────────────
+
+class TestPromptIngestion:
+    def test_prompt_run_created_with_assistant_tokens(self, conn, tmp_path):
+        """User prompt gets tokens attributed from the following assistant record."""
+        f = _write_jsonl(tmp_path / "sess.jsonl", [
+            _make_user("s1", "what is two plus two"),
+            _make_turn("s1", input_tokens=300),
+        ])
+        _ingest_jsonl_file(conn, "claude_code", f)
+        row = conn.execute("SELECT SUM(input_tokens) AS t FROM prompt_runs").fetchone()
+        assert row["t"] == 300  # from assistant record, not 0 from user record
+
+    def test_prompt_total_tokens_non_zero(self, conn, tmp_path):
+        f = _write_jsonl(tmp_path / "sess.jsonl", [
+            _make_user("s1", "what is two plus two"),
+            _make_turn("s1", input_tokens=300),
+        ])
+        _ingest_jsonl_file(conn, "claude_code", f)
+        row = conn.execute("SELECT SUM(total_tokens) AS t FROM prompts").fetchone()
+        assert row["t"] == 300
+
+    def test_prompt_run_count(self, conn, tmp_path):
+        """Two user/assistant pairs → two prompt_runs."""
+        f = _write_jsonl(tmp_path / "sess.jsonl", [
+            _make_user("s1", "first question"),
+            _make_turn("s1"),
+            _make_user("s1", "second question"),
+            _make_turn("s1"),
+        ])
+        _ingest_jsonl_file(conn, "claude_code", f)
+        count = conn.execute("SELECT COUNT(*) AS n FROM prompt_runs").fetchone()["n"]
+        assert count == 2
+
+    def test_user_without_assistant_not_inserted(self, conn, tmp_path):
+        """User record at end of file with no following assistant → no prompt_run."""
+        f = _write_jsonl(tmp_path / "sess.jsonl", [
+            _make_user("s1", "orphaned question"),
+        ])
+        _ingest_jsonl_file(conn, "claude_code", f)
+        count = conn.execute("SELECT COUNT(*) AS n FROM prompt_runs").fetchone()["n"]
+        assert count == 0
+
+    def test_session_inserted_before_prompt_run(self, conn, tmp_path):
+        """FK constraint: session row must exist before prompt_run insert."""
+        f = _write_jsonl(tmp_path / "sess.jsonl", [
+            _make_user("new-session", "hello"),
+            _make_turn("new-session", input_tokens=100),
+        ])
+        # Should not raise FK constraint error
+        _ingest_jsonl_file(conn, "claude_code", f)
+        session = conn.execute("SELECT id FROM sessions WHERE id='new-session'").fetchone()
+        assert session is not None
+        runs = conn.execute("SELECT COUNT(*) AS n FROM prompt_runs").fetchone()["n"]
+        assert runs == 1
 
 
 # ── run_backfill ──────────────────────────────────────────────────────────────
