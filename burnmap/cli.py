@@ -60,7 +60,7 @@ def _cmd_content(args: list[str]) -> None:
         print("Usage: burnmap content <subcommand>")
         print("Subcommands:")
         print("  wipe         Delete all stored prompt_content rows")
-        print("  mode <mode>  Set content mode (off|fingerprint_only|preview|full)")
+        print("  mode <mode>  Set content mode (preview|full)")
         return
     if args[0] == "wipe":
         from burnmap.db.schema import get_content_db, init_content_db
