@@ -1,10 +1,13 @@
 """/api/backfill — ingest all pre-existing JSONL/log files on first run."""
 from __future__ import annotations
 
+import logging
 import sqlite3
 import uuid
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     from fastapi import APIRouter, Depends
@@ -227,13 +230,14 @@ def _extract_user_text(record: dict[str, Any]) -> str:
 
 def _ingest_prompt_record(
     conn: sqlite3.Connection,
-    record: dict[str, Any],
+    user_record: dict[str, Any],
+    asst_record: dict[str, Any],
     session_id: str,
     agent: str,
     path: Path,
 ) -> None:
-    """Fingerprint a user-role record and write to prompts + prompt_runs."""
-    text = _extract_user_text(record)
+    """Fingerprint a user-role record using token/cost from the paired assistant record."""
+    text = _extract_user_text(user_record)
     if not text:
         return
 
@@ -243,14 +247,23 @@ def _ingest_prompt_record(
     except Exception:
         content_mode = "fingerprint_only"
 
-    # Derive project name from the grandparent directory of the JSONL file
     project = path.parent.name if path.parent else ""
 
-    ts = _ts_ms(record.get("timestamp") or record.get("ts"))
-    turn_id = record.get("uuid") or record.get("id")
-    usage = record.get("usage") or {}
-    input_tokens = int(usage.get("input_tokens") or 0)
-    cost_usd = float(record.get("costUSD") or record.get("cost_usd") or 0.0)
+    ts = _ts_ms(user_record.get("timestamp") or user_record.get("ts"))
+    turn_id = user_record.get("uuid") or user_record.get("id")
+
+    # Read tokens/cost from the assistant record (usage may be top-level or inside message)
+    asst_msg = asst_record.get("message") or {}
+    asst_usage = asst_record.get("usage") or (asst_msg.get("usage") if isinstance(asst_msg, dict) else None) or {}
+    input_tokens = int(asst_usage.get("input_tokens") or 0)
+    output_tokens = int(asst_usage.get("output_tokens") or 0)
+    cache_read_tokens = int(
+        asst_usage.get("cache_read_input_tokens") or asst_usage.get("cached_tokens") or 0
+    )
+    cost_usd = float(asst_record.get("costUSD") or asst_record.get("cost_usd") or 0.0)
+    model = asst_record.get("model") or ""
+    if cost_usd == 0.0 and (input_tokens or output_tokens) and model:
+        cost_usd = compute_cost(model, input_tokens, output_tokens, cache_read_tokens)
 
     fp = upsert_prompt(
         conn,
@@ -284,6 +297,8 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
     session_ids_seen: set[str] = set()
     # Track per-session min/max timestamps to populate started_at/ended_at
     session_ts: dict[str, tuple[int, int]] = {}  # session_id -> (min_ts, max_ts)
+    # Buffer last user record per session for prompt pairing with assistant record
+    pending_user: dict[str, dict[str, Any]] = {}  # session_id -> user record
 
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -300,7 +315,7 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
             if not session_id:
                 continue  # drop path-fallback rows; don't materialize dead sessions
 
-            # Ensure session row exists (dedup)
+            # Ensure session row exists BEFORE any prompt ingestion (FK requirement)
             if session_id not in existing_sessions and session_id not in session_ids_seen:
                 conn.execute(
                     "INSERT OR IGNORE INTO sessions (id, agent, started_at, ended_at) VALUES (?,?,0,0)",
@@ -317,11 +332,23 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
                 else:
                     session_ts[session_id] = (min(prev[0], ts), max(prev[1], ts))
 
-            # Prompt ingestion: extract user-role text blocks and fingerprint them
-            try:
-                _ingest_prompt_record(conn, record, session_id, agent, path)
-            except Exception:
-                pass  # prompts table may not exist on legacy schema
+            msg = record.get("message") or {}
+            role = msg.get("role") if isinstance(msg, dict) else None
+
+            if role == "user":
+                # Buffer user record — will be paired with the next assistant record
+                if _extract_user_text(record):
+                    pending_user[session_id] = record
+            elif role == "assistant":
+                # Pair with buffered user record from same session
+                user_rec = pending_user.pop(session_id, None)
+                if user_rec is not None:
+                    try:
+                        _ingest_prompt_record(conn, user_rec, record, session_id, agent, path)
+                    except sqlite3.OperationalError:
+                        pass  # legacy schema without prompts/prompt_runs table
+                    except Exception as exc:
+                        logger.warning("prompt ingest failed: %s", exc, exc_info=True)
 
             for span in build_spans_from_record(record, session_id, agent):
                 conn.execute(
