@@ -68,9 +68,39 @@ if _FASTAPI:
     def tasks(request: Request) -> HTMLResponse:
         return _html(request, "pages/tasks.html")
 
+    @router.get("/trace/{trace_id}", response_class=HTMLResponse)
+    def trace_detail(request: Request, trace_id: str) -> HTMLResponse:
+        """Render trace detail page for a specific trace/session."""
+        from burnmap.api.trace import query_trace
+        from burnmap.db.schema import get_db
+        db = get_db()
+        try:
+            trace = query_trace(db, trace_id)
+            if trace is None:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=404, detail="Trace not found")
+            return _html(request, "pages/trace_tree.html", trace=trace)
+        finally:
+            db.close()
+
     @router.get("/trace", response_class=HTMLResponse)
     def trace(request: Request) -> HTMLResponse:
-        return _html(request, "pages/trace_tree.html")
+        """Render trace list/index page. Redirects to first trace or shows empty state."""
+        from burnmap.db.schema import get_db
+        db = get_db()
+        try:
+            # Get first session to show its trace
+            row = db.execute("SELECT id FROM sessions ORDER BY started_at DESC LIMIT 1").fetchone()
+            if row:
+                session_id = row[0]
+                from burnmap.api.trace import query_trace
+                trace = query_trace(db, session_id)
+                if trace:
+                    return _html(request, "pages/trace_tree.html", trace=trace)
+            # Fallback: render with empty trace
+            return _html(request, "pages/trace_tree.html", trace={"id": None, "label": "No traces", "total_tokens": 0, "total_cost": 0, "turns": 0, "tools": 0, "tree": []})
+        finally:
+            db.close()
 
     @router.get("/tools", response_class=HTMLResponse)
     def tools(request: Request) -> HTMLResponse:
