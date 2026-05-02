@@ -27,6 +27,15 @@ if _FASTAPI:
         finally:
             conn.close()
 
+    @router.get("/api/settings")
+    def aggregate_settings() -> JSONResponse:
+        """Aggregate settings for the export page: content_mode + pricing metadata."""
+        from burnmap.api.content import get_content_mode
+        return JSONResponse({
+            "content_mode": get_content_mode(),
+            "pricing": query_pricing_info(),
+        })
+
     @router.get("/api/settings/storage")
     def storage_info(db: sqlite3.Connection = Depends(_db)) -> JSONResponse:
         return JSONResponse(query_storage_info(db))
