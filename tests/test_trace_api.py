@@ -175,6 +175,18 @@ class TestQueryTrace:
         root = result["roots"][0]
         assert root["attribution"] == "exact"  # turn → exact
 
+    def test_duration_ms_present(self, seeded_db):
+        result = query_trace(seeded_db, _SID)
+        # ended_at - started_at = 1_700_001_000_000 - 1_700_000_000_000 = 1_000_000
+        assert result["duration_ms"] == 1_000_000
+
+    def test_tree_present_with_started_at_and_children(self, seeded_db):
+        result = query_trace(seeded_db, _SID)
+        assert "tree" in result
+        tree = result["tree"]
+        assert tree["started_at"] == result["started_at"]
+        assert tree["children"] is result["roots"]
+
 
 # ── Template rendering ────────────────────────────────────────────────────────
 
@@ -271,3 +283,45 @@ class TestTraceTreeTemplate:
         # No children, but renders without error
         assert "icicle-bar" in out
         assert "indent-row" in out
+
+
+# ── Smoke: query_trace output renders the trace_tree template without error ───
+
+_WEB_SID = str(uuid.uuid4())
+
+
+def _seed_web(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "INSERT INTO sessions (id, agent, started_at, ended_at) VALUES (?,?,?,?)",
+        (_WEB_SID, "claude_code", 1_700_000_000_000, 1_700_001_000_000),
+    )
+    conn.execute(
+        "INSERT INTO spans (id, session_id, agent, kind, name, parent_id, "
+        "input_tokens, output_tokens, cost_usd, started_at, ended_at, is_outlier) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (str(uuid.uuid4()), _WEB_SID, "claude_code", "turn", "root", None, 100, 50, 0.001,
+         1_700_000_000_000, 1_700_001_000_000, 0),
+    )
+    conn.commit()
+
+
+class TestTraceRouteSmoke:
+    """Verify query_trace output can be passed directly to the Jinja template."""
+
+    def test_trace_tree_template_renders_from_query_trace(self, env):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        _seed_web(conn)
+        result = query_trace(conn, _WEB_SID)
+        assert result is not None
+        tmpl = env.get_template("pages/trace_tree.html")
+        out = tmpl.render(trace=result)
+        assert "waterfall" in out
+        assert "icicle" in out
+
+    def test_trace_returns_none_for_missing(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        assert query_trace(conn, "no-such-id") is None
