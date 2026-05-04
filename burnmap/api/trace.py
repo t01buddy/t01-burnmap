@@ -61,6 +61,11 @@ def _build_tree(
         node = dict(s)
         node["children"] = []
         node["attribution"] = _attribution(s.get("kind", ""))
+        # Normalise to template-expected aliases
+        node["label"] = s.get("name", "")
+        node["tokens"] = s.get("input_tokens", 0) + s.get("output_tokens", 0)
+        node["cost"] = s.get("cost_usd", 0.0)
+        node["loop"] = False
         by_id[s["id"]] = node
 
     roots: list[dict[str, Any]] = []
@@ -134,13 +139,30 @@ def query_trace(
     total_tokens = sum(s.get("input_tokens", 0) + s.get("output_tokens", 0) for s in spans)
     total_cost = sum(s.get("cost_usd", 0.0) for s in spans)
 
+    started_at = session.get("started_at") or 0
+    ended_at = session.get("ended_at") or 0
+    duration_ms = max(0, ended_at - started_at)
+    tree = {
+        "id": session_id,
+        "label": session.get("agent") or session_id,
+        "kind": "session",
+        "tokens": total_tokens,
+        "cost": round(total_cost, 6),
+        "loop": False,
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "children": collapsed_roots,
+    }
+
     return {
         "session_id": session_id,
         "agent": session.get("agent"),
-        "started_at": session.get("started_at"),
-        "ended_at": session.get("ended_at"),
+        "started_at": started_at,
+        "ended_at": ended_at,
         "total_tokens": total_tokens,
         "total_cost": round(total_cost, 6),
         "span_count": len(spans),
         "roots": collapsed_roots,
+        "duration_ms": duration_ms,
+        "tree": tree,
     }
