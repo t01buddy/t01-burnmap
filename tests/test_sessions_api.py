@@ -44,60 +44,79 @@ def _seed(conn: sqlite3.Connection) -> None:
 
 class TestQuerySessions:
     def test_returns_all_sessions(self, db):
-        rows = query_sessions(db)
+        rows, total = query_sessions(db)
         assert len(rows) == 2
+        assert total == 2
 
     def test_session_fields(self, db):
-        rows = query_sessions(db)
+        rows, _ = query_sessions(db)
         ids = {r["id"] for r in rows}
         assert _SID_A in ids
         assert _SID_B in ids
 
     def test_span_count(self, db):
-        rows = query_sessions(db)
+        rows, _ = query_sessions(db)
         row_a = next(r for r in rows if r["id"] == _SID_A)
         assert row_a["span_count"] == 2
 
     def test_token_sum(self, db):
-        rows = query_sessions(db)
+        rows, _ = query_sessions(db)
         row_a = next(r for r in rows if r["id"] == _SID_A)
         assert row_a["total_tokens"] == 600  # 100+0 + 400+100
 
     def test_cost_sum(self, db):
-        rows = query_sessions(db)
+        rows, _ = query_sessions(db)
         row_a = next(r for r in rows if r["id"] == _SID_A)
         assert abs(row_a["total_cost_usd"] - 0.011) < 1e-9
 
     def test_has_outlier_flag(self, db):
-        rows = query_sessions(db)
+        rows, _ = query_sessions(db)
         row_a = next(r for r in rows if r["id"] == _SID_A)
         assert row_a["has_outlier"] == 1
 
     def test_no_outlier_flag(self, db):
-        rows = query_sessions(db)
+        rows, _ = query_sessions(db)
         row_b = next(r for r in rows if r["id"] == _SID_B)
         assert row_b["has_outlier"] == 0
 
     def test_filter_by_agent(self, db):
-        rows = query_sessions(db, agent="codex")
+        rows, total = query_sessions(db, agent="codex")
         assert len(rows) == 1
+        assert total == 1
         assert rows[0]["id"] == _SID_B
 
     def test_filter_by_search(self, db):
         partial = _SID_A[:8]
-        rows = query_sessions(db, search=partial)
+        rows, total = query_sessions(db, search=partial)
         assert len(rows) == 1
+        assert total == 1
         assert rows[0]["id"] == _SID_A
 
     def test_limit(self, db):
-        rows = query_sessions(db, limit=1)
+        rows, total = query_sessions(db, limit=1)
         assert len(rows) == 1
+        assert total == 2  # total unchanged despite limit
+
+    def test_offset(self, db):
+        rows_p1, total = query_sessions(db, limit=1, offset=0)
+        rows_p2, _ = query_sessions(db, limit=1, offset=1)
+        assert total == 2
+        assert len(rows_p1) == 1
+        assert len(rows_p2) == 1
+        assert rows_p1[0]["id"] != rows_p2[0]["id"]
+
+    def test_offset_beyond_total(self, db):
+        rows, total = query_sessions(db, limit=50, offset=100)
+        assert rows == []
+        assert total == 2
 
     def test_empty_db(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         init_db(conn)
-        assert query_sessions(conn) == []
+        rows, total = query_sessions(conn)
+        assert rows == []
+        assert total == 0
         conn.close()
 
     def test_session_with_no_spans(self):
@@ -110,7 +129,8 @@ class TestQuerySessions:
             (sid, "claude_code", 1_700_000_000_000),
         )
         conn.commit()
-        rows = query_sessions(conn)
+        rows, total = query_sessions(conn)
         assert len(rows) == 1
+        assert total == 1
         assert rows[0]["span_count"] == 0
         conn.close()
