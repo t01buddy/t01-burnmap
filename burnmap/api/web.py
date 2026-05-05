@@ -26,11 +26,17 @@ def _format_cost(value: float) -> str:
     return f"${value:.4f}"
 
 
+def _filter_max(value: float, floor: float) -> float:
+    """Jinja2 filter: {{ value | max(floor) }} — clamp value to a minimum."""
+    return max(value, floor)
+
+
 if _FASTAPI:
     router = APIRouter()
     templates = Jinja2Templates(directory=str(_templates_dir))
     templates.env.filters["format_tok"] = _format_tok
     templates.env.filters["format_cost"] = _format_cost
+    templates.env.filters["max"] = _filter_max
 
     def _html(request: Request, template: str, **ctx: object) -> HTMLResponse:
         return templates.TemplateResponse(request, template, ctx)
