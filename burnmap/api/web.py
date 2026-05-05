@@ -124,14 +124,6 @@ if _FASTAPI:
     def outliers(request: Request) -> HTMLResponse:
         return _html(request, "pages/outliers.html")
 
-    @router.get("/quota", response_class=HTMLResponse)
-    def quota(request: Request) -> HTMLResponse:
-        return _html(request, "pages/quota.html")
-
-    @router.get("/alerts", response_class=HTMLResponse)
-    def alerts(request: Request) -> HTMLResponse:
-        return _html(request, "alerts.html")
-
     @router.get("/settings", response_class=HTMLResponse)
     def settings(request: Request) -> HTMLResponse:
         return _html(request, "pages/settings.html")
