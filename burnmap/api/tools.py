@@ -27,11 +27,12 @@ if _FASTAPI:
     @router.get("/api/tools")
     def list_tools(
         agent: str | None = Query(None, description="Filter by agent name"),
+        q: str | None = Query(None, description="Filter by tool name (LIKE)"),
         limit: int = Query(50, ge=1, le=1000),
         offset: int = Query(0, ge=0),
         db: sqlite3.Connection = Depends(_db),
     ) -> JSONResponse:
-        rows, total = query_tools(db, agent=agent, limit=limit, offset=offset)
+        rows, total = query_tools(db, agent=agent, q=q, limit=limit, offset=offset)
         return JSONResponse({"tools": rows, "total": total, "limit": limit, "offset": offset})
 
     @router.get("/api/tools/{tool_name}")
@@ -53,24 +54,28 @@ def query_tools(
     conn: sqlite3.Connection,
     *,
     agent: str | None = None,
+    q: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
     """Return per-tool aggregate rows (kind='tool'), ordered by total_cost_usd desc.
 
-    Returns (rows, total) where total is the count of distinct tool names.
-    Default page size is 50.
+    Returns (rows, total) where total is the count of distinct tool names matching
+    the filters (unaffected by limit/offset).
     """
     params: list[Any] = []
-    agent_clause = ""
+    extra_clauses = ""
     if agent:
-        agent_clause = "AND agent = ?"
+        extra_clauses += " AND agent = ?"
         params.append(agent)
+    if q:
+        extra_clauses += " AND name LIKE ?"
+        params.append(f"%{q}%")
 
-    count_params = list(params)
+    filter_params = list(params)
     total_row = conn.execute(
-        f"SELECT COUNT(DISTINCT name) AS n FROM spans WHERE kind = 'tool' {agent_clause}",
-        count_params,
+        f"SELECT COUNT(DISTINCT name) AS n FROM spans WHERE kind = 'tool' {extra_clauses}",
+        filter_params,
     ).fetchone()
     total = total_row["n"] if total_row else 0
 
@@ -88,7 +93,7 @@ def query_tools(
             SUM(cost_usd)                                   AS total_cost_usd,
             MAX(started_at)                                 AS last_seen_ms
         FROM spans
-        WHERE kind = 'tool' {agent_clause}
+        WHERE kind = 'tool' {extra_clauses}
         GROUP BY name
         ORDER BY total_cost_usd DESC
         LIMIT ? OFFSET ?
@@ -98,8 +103,8 @@ def query_tools(
     rows = [dict(r) for r in cur.fetchall()]
     # cost_share relative to the full dataset (not just this page)
     all_cost_row = conn.execute(
-        f"SELECT SUM(cost_usd) AS s FROM spans WHERE kind = 'tool' {agent_clause}",
-        count_params,
+        f"SELECT SUM(cost_usd) AS s FROM spans WHERE kind = 'tool' {extra_clauses}",
+        filter_params,
     ).fetchone()
     grand_total = (all_cost_row["s"] or 0.0) if all_cost_row else 0.0
     for r in rows:
