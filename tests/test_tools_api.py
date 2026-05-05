@@ -38,7 +38,7 @@ def _seed(conn: sqlite3.Connection) -> None:
 
 class TestQueryTools:
     def test_returns_only_tool_kind(self, db):
-        rows = query_tools(db)
+        rows, total = query_tools(db)
         assert all(True for _ in rows)  # no kind field in output — just names
         names = {r["name"] for r in rows}
         assert "/commit" not in names
@@ -46,49 +46,66 @@ class TestQueryTools:
         assert "Write" in names
 
     def test_aggregates_calls(self, db):
-        rows = query_tools(db)
+        rows, _ = query_tools(db)
         read_row = next(r for r in rows if r["name"] == "Read")
         # t1, t2 (claude_code) + t5 (codex) = 3 calls
         assert read_row["calls"] == 3
 
     def test_token_sums(self, db):
-        rows = query_tools(db)
+        rows, _ = query_tools(db)
         read_row = next(r for r in rows if r["name"] == "Read")
         assert read_row["total_input_tokens"] == 380
         assert read_row["total_output_tokens"] == 0
 
     def test_cost_sum(self, db):
-        rows = query_tools(db)
+        rows, _ = query_tools(db)
         read_row = next(r for r in rows if r["name"] == "Read")
         assert abs(read_row["total_cost_usd"] - 0.004) < 1e-9
 
     def test_ordered_by_cost_desc(self, db):
-        rows = query_tools(db)
+        rows, _ = query_tools(db)
         costs = [r["total_cost_usd"] for r in rows]
         assert costs == sorted(costs, reverse=True)
 
     def test_cost_share_sums_to_one(self, db):
-        rows = query_tools(db)
+        rows, _ = query_tools(db)
         total_share = sum(r["cost_share"] for r in rows)
         assert abs(total_share - 1.0) < 0.01
 
+    def test_total_count(self, db):
+        _, total = query_tools(db)
+        assert total == 2  # Read and Write
+
+    def test_pagination(self, db):
+        rows_p1, total = query_tools(db, limit=1, offset=0)
+        rows_p2, _ = query_tools(db, limit=1, offset=1)
+        assert total == 2
+        assert len(rows_p1) == 1
+        assert len(rows_p2) == 1
+        # Pages should not overlap
+        assert rows_p1[0]["name"] != rows_p2[0]["name"]
+
     def test_limit(self, db):
-        rows = query_tools(db, limit=1)
+        rows, _ = query_tools(db, limit=1)
         assert len(rows) == 1
 
     def test_agent_filter(self, db):
-        rows = query_tools(db, agent="codex")
+        rows, total = query_tools(db, agent="codex")
+        assert total == 1
         assert len(rows) == 1
         assert rows[0]["name"] == "Read"
         assert rows[0]["calls"] == 1
 
     def test_agent_filter_no_match(self, db):
-        rows = query_tools(db, agent="unknown_agent")
+        rows, total = query_tools(db, agent="unknown_agent")
         assert rows == []
+        assert total == 0
 
     def test_empty_db(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         init_db(conn)
-        assert query_tools(conn) == []
+        rows, total = query_tools(conn)
+        assert rows == []
+        assert total == 0
         conn.close()

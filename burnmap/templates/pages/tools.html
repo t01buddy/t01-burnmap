@@ -8,7 +8,7 @@
 
   <div class="page-header">
     <h1 class="page-title">Tools</h1>
-    <span class="meta" style="font-size:12px;color:var(--ink-3)">aggregate across all traces</span>
+    <span class="meta" style="font-size:12px;color:var(--ink-3)" x-text="total + ' tools'"></span>
   </div>
 
   <template x-if="loading">
@@ -55,29 +55,56 @@
     </div>
   </template>
 
+  <template x-if="!loading && totalPages > 1">
+    <div class="pager">
+      <button class="pager-btn" :disabled="page <= 1" @click="goPage(page - 1)">&#8592; Prev</button>
+      <span class="pager-info" x-text="'Page ' + page + ' of ' + totalPages"></span>
+      <button class="pager-btn" :disabled="page >= totalPages" @click="goPage(page + 1)">Next &#8594;</button>
+    </div>
+  </template>
+
 </div>
 
 <style>
 .page-header { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
 .page-title  { font-size:20px; font-weight:600; }
 .loading-row { padding:40px; text-align:center; color:var(--ink-3,#888); font-size:14px; }
+.pager { display:flex; align-items:center; gap:12px; margin-top:16px; justify-content:center; font-size:13px; }
+.pager-btn { padding:4px 12px; border:1px solid var(--rule-soft,#ddd); border-radius:4px; background:none; cursor:pointer; }
+.pager-btn:disabled { opacity:0.4; cursor:default; }
+.pager-info { color:var(--ink-3,#888); }
 </style>
 
 <script>
+const TOOLS_PAGE_SIZE = 50;
+
 function toolsPage() {
   return {
     rows: [],
+    total: 0,
+    page: 1,
     loading: false,
+
+    get totalPages() {
+      return Math.max(1, Math.ceil(this.total / TOOLS_PAGE_SIZE));
+    },
 
     async load() {
       this.loading = true;
+      const offset = (this.page - 1) * TOOLS_PAGE_SIZE;
       try {
-        const r = await fetch('/api/tools?limit=200');
+        const r = await fetch(`/api/tools?limit=${TOOLS_PAGE_SIZE}&offset=${offset}`);
         const d = await r.json();
         this.rows = d.tools || [];
+        this.total = d.total || 0;
       } finally {
         this.loading = false;
       }
+    },
+
+    goPage(n) {
+      this.page = n;
+      this.load();
     },
 
     fmtTok(n) {
