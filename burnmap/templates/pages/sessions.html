@@ -54,8 +54,8 @@
         <tbody>
           <template x-for="s in rows" :key="s.id">
             <tr>
-              <td>
-                <span class="mono" style="font-size:12px" x-text="s.id.slice(0,16) + '…'"></span>
+              <td style="white-space:nowrap">
+                <a class="session-id-link mono" style="font-size:12px" :href="'/trace/' + s.id" x-text="s.id"></a>
               </td>
               <td>
                 <span class="agent-badge"
@@ -105,6 +105,8 @@
 .agent-badge--aider       { background:#fce7f3; color:#831843; }
 .chip         { display:inline-block; padding:1px 7px; border-radius:4px; font-size:11px; font-family:var(--font-mono); }
 .chip--outlier { background:#fee2e2; color:#991b1b; }
+.session-id-link { color:var(--ink); text-decoration:none; }
+.session-id-link:hover { color:var(--accent,#0070f3); text-decoration:underline; cursor:pointer; }
 </style>
 
 <script>
