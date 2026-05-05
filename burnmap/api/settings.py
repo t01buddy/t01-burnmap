@@ -50,8 +50,9 @@ if _FASTAPI:
 
     @router.post("/api/settings/sync-pricing")
     def sync_pricing() -> JSONResponse:
-        from burnmap.pricing import sync_pricing_yaml
-        msg = sync_pricing_yaml()
+        from burnmap import pricing as _pricing
+        msg = _pricing.sync_pricing_yaml()
+        _pricing._PRICING_CACHE = None  # invalidate so next read picks up new YAML
         if "network error" in msg or "not installed" in msg:
             return JSONResponse({"ok": False, "message": msg}, status_code=500)
         # Extract model count from message: "wrote N models to ..."
@@ -114,10 +115,10 @@ def query_providers(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 def query_pricing_info() -> dict[str, Any]:
     """Return pricing YAML metadata: model count and last-sync date."""
     try:
-        from burnmap.pricing import load_pricing, _PRICING_YAML_PATH  # type: ignore[attr-defined]
-        rates = load_pricing()
+        from burnmap.pricing import _load_pricing, _PRICING_YAML  # type: ignore[attr-defined]
+        rates = _load_pricing()
         model_count = len(rates)
-        yaml_path = str(_PRICING_YAML_PATH) if hasattr(_PRICING_YAML_PATH, '__fspath__') else str(Path(__file__).parent.parent / "pricing.yaml")
+        yaml_path = str(_PRICING_YAML)
         stat = Path(yaml_path).stat() if Path(yaml_path).exists() else None
         import datetime
         last_synced = (
