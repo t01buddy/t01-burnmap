@@ -1,12 +1,10 @@
 # 4. Usage scenarios
 
-Nine scenarios driving the v1 feature set.
+Eight scenarios driving the v1 feature set.
 
 - **Daily headline check.** Open dashboard. Top row: tokens today, cost today, cost-this-block, cost-this-week, cache-hit rate. No drill-down needed.
 
 - **Post-hoc budget-spike analysis.** A prompt cost more than usual. Prompts > sort by cost > drill into detail > histogram shows one 12x outlier > tree shows subagent Bash loop.
-
-- **Live stuck-loop interrupt.** Stuck-loop alert appears ("Bash retry #18 — $0.31"). Click into live trace, confirm loop, interrupt agent. Requires precision-mode hooks.
 
 - **Cost data export.** Export CSV of sessions over a date range. Subscription sessions labeled separately (synthetic estimates).
 

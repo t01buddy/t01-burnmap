@@ -17,7 +17,6 @@
 | **Prompts** | Fingerprinting, aggregates table, list page | P0 |
 | **Prompts** | Detail: runs list, histogram, outlier flags | P0 |
 | **Tasks** | Slash commands, skills, subagent calls — same shape as prompts | P1 |
-| **Quotas** | 5-hour block + weekly panels with ETA and burn rate | P0 |
 | **Privacy** | Two content modes (`preview`: first 5 words + fingerprint, `full`: complete text + fingerprint) with switch and wipe | P0 |
 | **Privacy** | No prompt text in export unless `--include-content` | P0 |
 | **Auth** | Token gate when HOST != localhost | P0 |

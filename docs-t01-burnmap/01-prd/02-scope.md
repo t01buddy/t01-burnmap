@@ -10,7 +10,6 @@
 - **Attribution labels** — `exact` / `apportioned` / `inherited` as colored badges (green / amber / gray) on each span.
 - **Content-mode privacy** — two modes (`preview` default, `full` opt-in). SHA-256 fingerprint always stored. One-command wipe drops snippets; fingerprints and aggregates are preserved.
 - **Cost estimation** — effective-dated LiteLLM pricing. Subscription runs labeled synthetic, API runs labeled real.
-- **Quota panels** — Claude 5-hour block + weekly progress bars. Pro / Max5 / Max20 / Custom. P90 auto-detect.
 - **Live tailer** — watchdog + SSE, sub-second refresh.
 - **Local-only storage** — SQLite WAL at `~/.t01-burnmap/usage.db`.
 - **One-command install** — `pipx install t01-burnmap`.
