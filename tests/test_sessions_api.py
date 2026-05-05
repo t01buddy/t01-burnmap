@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from burnmap.api.sessions import query_sessions
+from burnmap.api.sessions import _date_to_ms, query_sessions
 from burnmap.db.schema import init_db
 
 
@@ -134,3 +134,51 @@ class TestQuerySessions:
         assert total == 1
         assert rows[0]["span_count"] == 0
         conn.close()
+
+
+class TestDateToMs:
+    def test_known_date(self):
+        ms = _date_to_ms("2023-11-14")
+        # 2023-11-14 00:00:00 UTC in ms
+        assert ms == 1_699_920_000_000
+
+    def test_end_of_day(self):
+        ms_start = _date_to_ms("2023-11-14")
+        ms_end = _date_to_ms("2023-11-14", end_of_day=True)
+        assert ms_end == ms_start + 86_399_999
+
+
+class TestDateRangeFilter:
+    # _SID_A started_at = 1_700_000_000_000 ms = 2023-11-14 22:13:20 UTC
+    # _SID_B started_at = 1_700_000_200_000 ms = 2023-11-14 22:16:40 UTC
+
+    def test_started_from_includes_exact_date(self, db):
+        # both sessions are on 2023-11-14
+        rows, _ = query_sessions(db, started_from="2023-11-14")
+        assert len(rows) == 2
+
+    def test_started_from_excludes_earlier(self, db):
+        # future date — no sessions
+        rows, _ = query_sessions(db, started_from="2025-01-01")
+        assert rows == []
+
+    def test_started_to_includes_exact_date(self, db):
+        rows, _ = query_sessions(db, started_to="2023-11-14")
+        assert len(rows) == 2
+
+    def test_started_to_excludes_later(self, db):
+        rows, _ = query_sessions(db, started_to="2020-01-01")
+        assert rows == []
+
+    def test_date_range_window(self, db):
+        rows, _ = query_sessions(db, started_from="2023-11-14", started_to="2023-11-14")
+        assert len(rows) == 2
+
+    def test_date_range_excludes_both(self, db):
+        rows, _ = query_sessions(db, started_from="2024-01-01", started_to="2024-12-31")
+        assert rows == []
+
+    def test_date_range_composes_with_agent(self, db):
+        rows, _ = query_sessions(db, agent="codex", started_from="2023-11-14")
+        assert len(rows) == 1
+        assert rows[0]["id"] == _SID_B
