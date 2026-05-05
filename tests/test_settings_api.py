@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from burnmap.api.settings import query_storage_info, query_providers, query_pricing_info
+from burnmap.api.backfill import query_backfill_status
 
 
 @pytest.fixture()
@@ -148,3 +149,35 @@ class TestQueryPricingInfo:
             # Should not raise
             result = query_pricing_info()
         assert "model_count" in result
+
+
+class TestSessionCountConsistency:
+    """Providers and Data sections must agree on session count (issue #161)."""
+
+    def test_providers_total_matches_backfill_sessions_ingested(self, conn):
+        # Insert 2 sessions: one with spans (usable), one without (empty/malformed)
+        sid_a = str(uuid.uuid4())
+        sid_b = str(uuid.uuid4())
+        conn.execute("INSERT INTO sessions(id, agent) VALUES (?, 'claude_code')", (sid_a,))
+        conn.execute("INSERT INTO sessions(id, agent) VALUES (?, 'codex')", (sid_b,))
+        conn.execute(
+            "INSERT INTO spans(id, session_id, agent, kind, name) VALUES (?, ?, 'claude_code', 'turn', 'x')",
+            (str(uuid.uuid4()), sid_a),
+        )
+        conn.commit()
+
+        fake_adapters = [
+            {"agent": "claude_code", "found": True, "path": "/p", "checked_paths": []},
+            {"agent": "codex", "found": True, "path": "/q", "checked_paths": []},
+        ]
+        with patch("burnmap.api.settings.discover_adapters", return_value=fake_adapters):
+            providers = query_providers(conn)
+        providers_total = sum(p["sessions"] for p in providers)
+
+        with patch("burnmap.api.backfill._discover_files", return_value=[]):
+            status = query_backfill_status(conn)
+
+        assert providers_total == status["sessions_ingested"], (
+            f"Providers total ({providers_total}) != backfill sessions_ingested "
+            f"({status['sessions_ingested']})"
+        )

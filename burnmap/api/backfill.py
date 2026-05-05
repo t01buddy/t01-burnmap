@@ -427,12 +427,21 @@ def run_backfill(conn: sqlite3.Connection) -> dict[str, Any]:
 # ── Status (read-only) ────────────────────────────────────────────────────────
 
 def query_backfill_status(conn: sqlite3.Connection) -> dict[str, Any]:
-    """Return current ingestion counts and file discovery totals."""
-    row = conn.execute(
+    """Return current ingestion counts and file discovery totals.
+
+    sessions_ingested counts rows in the sessions table (same source as the
+    Providers section) so both UI sections agree on the session total.
+    spans_ingested counts distinct session_id values in spans (sessions with
+    usable data), reported separately for transparency.
+    """
+    session_row = conn.execute(
+        "SELECT COUNT(*) AS s FROM sessions"
+    ).fetchone()
+    span_row = conn.execute(
         "SELECT COUNT(DISTINCT session_id) AS s, COUNT(*) AS sp FROM spans"
     ).fetchone()
-    sessions = row["s"] if row else 0
-    spans = row["sp"] if row else 0
+    sessions = session_row["s"] if session_row else 0
+    spans = span_row["sp"] if span_row else 0
     total_files = len(_discover_files())
     pct = 100 if total_files == 0 else min(100, round(sessions / total_files * 100))
     return {
