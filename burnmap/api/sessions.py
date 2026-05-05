@@ -28,11 +28,12 @@ if _FASTAPI:
     def list_sessions(
         agent: str | None = Query(None, description="Filter by agent name"),
         search: str | None = Query(None, description="Filter by session id substring"),
-        limit: int = Query(100, ge=1, le=1000),
+        limit: int = Query(50, ge=1, le=1000),
+        offset: int = Query(0, ge=0),
         db: sqlite3.Connection = Depends(_db),
     ) -> JSONResponse:
-        rows = query_sessions(db, agent=agent, search=search, limit=limit)
-        return JSONResponse({"sessions": rows, "count": len(rows)})
+        rows, total = query_sessions(db, agent=agent, search=search, limit=limit, offset=offset)
+        return JSONResponse({"sessions": rows, "total": total, "limit": limit, "offset": offset})
 else:
     router = None  # type: ignore[assignment]
 
@@ -42,9 +43,10 @@ def query_sessions(
     *,
     agent: str | None = None,
     search: str | None = None,
-    limit: int = 100,
-) -> list[dict[str, Any]]:
-    """Return session rows with aggregate stats and outlier flag."""
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    """Return (rows, total) with aggregate stats and outlier flag. Default page size 50."""
     where_clauses = []
     params: list[Any] = []
 
@@ -56,6 +58,11 @@ def query_sessions(
         params.append(f"%{search}%")
 
     where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    count_row = conn.execute(
+        f"SELECT COUNT(*) AS n FROM sessions s {where}", params
+    ).fetchone()
+    total = count_row["n"] if count_row else 0
 
     cur = conn.execute(
         f"""
@@ -73,8 +80,8 @@ def query_sessions(
         {where}
         GROUP BY s.id
         ORDER BY s.started_at DESC
-        LIMIT ?
+        LIMIT ? OFFSET ?
         """,
-        (*params, limit),
+        (*params, limit, offset),
     )
-    return [dict(r) for r in cur.fetchall()]
+    return [dict(r) for r in cur.fetchall()], total
