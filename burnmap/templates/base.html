@@ -34,12 +34,6 @@
     <!-- Analyze section -->
     <div class="rail__section">
       <div class="rail__label">Analyze</div>
-      <a href="/overview" class="rail__link" :class="{'is-active': page === 'overview'}">
-        <span class="rail__glyph">
-          <svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2.5 10a4.5 4.5 0 0 1 9 0"/><path d="M7 10l2.5-3"/></svg>
-        </span>
-        <span>Overview</span>
-      </a>
       <a href="/prompts" class="rail__link" :class="{'is-active': page === 'prompts'}">
         <span class="rail__glyph">
           <svg viewBox="0 0 14 14" width="14" height="14"><rect x="2" y="3" width="10" height="1.4" fill="currentColor"/><rect x="2" y="6.3" width="10" height="1.4" fill="currentColor"/><rect x="2" y="9.6" width="10" height="1.4" fill="currentColor"/></svg>
@@ -186,7 +180,7 @@ function shell() {
 
     async init() {
       // Derive active page from URL path
-      const path = window.location.pathname.replace(/^\//, '') || 'overview';
+      const path = window.location.pathname.replace(/^\//, '') || 'sessions';
       this.page = path.split('/')[0];
 
       // Expose agentFilter globally so page scripts can read it
