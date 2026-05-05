@@ -6,7 +6,12 @@
      .id, .label, .kind, .tokens, .cost, .loop, .children (list),
      .started_at (ms epoch, optional), .ended_at (ms epoch, optional)
 #}
+{% extends "base.html" %}
 {% from "components/waterfall.html" import waterfall_tab %}
+
+{% block title %}Trace — burnmap{% endblock %}
+
+{% block content %}
 
 {# ── Icicle macro ─────────────────────────────────────────────────────── #}
 {% macro icicle_row(node, depth, total_tokens) %}
@@ -191,3 +196,4 @@ function traceTreePage() {
   };
 }
 </script>
+{% endblock %}
