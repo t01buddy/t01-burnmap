@@ -11,7 +11,7 @@ from pathlib import Path
 
 from burnmap.auth import TokenAuthMiddleware
 from burnmap.api import (
-    tasks_router, providers_router, quota_router, trace_router,
+    tasks_router, providers_router, trace_router,
     tools_router, sessions_router, settings_router, prompts_router,
     overview_router,
 )
@@ -100,9 +100,8 @@ def create_app() -> FastAPI:
         app.add_middleware(TokenAuthMiddleware)
 
     for router in (
-        overview_router, tasks_router, providers_router, quota_router,
-        trace_router, tools_router, sessions_router, settings_router,
-        prompts_router,
+        overview_router, tasks_router, providers_router, trace_router,
+        tools_router, sessions_router, settings_router, prompts_router,
     ):
         if router is not None:
             app.include_router(router)
@@ -141,13 +140,6 @@ def create_app() -> FastAPI:
         from burnmap.api.content import router as content_router
         if content_router is not None:
             app.include_router(content_router)
-    except ImportError:
-        pass
-
-    try:
-        from burnmap.api.alerts import router as alerts_router
-        if alerts_router is not None:
-            app.include_router(alerts_router)
     except ImportError:
         pass
 
