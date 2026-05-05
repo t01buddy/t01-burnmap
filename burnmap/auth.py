@@ -43,13 +43,16 @@ try:
         """Enforce bearer token auth for non-localhost requests."""
 
         async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+            if request.url.path == "/health":
+                return await call_next(request)
+
             host = request.headers.get("host", "localhost")
             if is_local_request(host):
                 return await call_next(request)
 
             token = load_token()
             if token is None:
-                return await call_next(request)  # auth disabled if no token configured
+                token = generate_token()
 
             auth_header = request.headers.get("authorization", "")
             if auth_header == f"Bearer {token}":
