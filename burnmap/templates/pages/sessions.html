@@ -26,7 +26,7 @@
     </select>
     <span class="spacer"></span>
     <span class="mono muted" style="font-size:11px;align-self:center"
-          x-text="count + ' sessions'"></span>
+          x-text="total + ' sessions'"></span>
   </div>
 
   <template x-if="loading">
@@ -81,6 +81,16 @@
     </div>
   </template>
 
+  <!-- Pager -->
+  <template x-if="!loading && total > limit">
+    <div class="row" style="margin-top:14px;gap:8px;align-items:center">
+      <button class="btn btn--ghost" :disabled="page <= 1" @click="goPage(page - 1)">← prev</button>
+      <span class="mono muted" style="font-size:12px"
+            x-text="'page ' + page + ' of ' + Math.ceil(total / limit)"></span>
+      <button class="btn btn--ghost" :disabled="page >= Math.ceil(total / limit)" @click="goPage(page + 1)">next →</button>
+    </div>
+  </template>
+
 </div>
 
 <style>
@@ -101,7 +111,9 @@
 function sessionsPage() {
   return {
     rows: [],
-    count: 0,
+    total: 0,
+    limit: 50,
+    page: 1,
     loading: false,
     search: '',
     agentFilter: '',
@@ -109,16 +121,23 @@ function sessionsPage() {
     async load() {
       this.loading = true;
       try {
-        let url = '/api/sessions?limit=200';
+        const offset = (this.page - 1) * this.limit;
+        let url = `/api/sessions?limit=${this.limit}&offset=${offset}`;
         if (this.search) url += '&search=' + encodeURIComponent(this.search);
         if (this.agentFilter) url += '&agent=' + encodeURIComponent(this.agentFilter);
         const r = await fetch(url);
         const d = await r.json();
         this.rows  = d.sessions || [];
-        this.count = d.count || 0;
+        this.total = d.total || 0;
+        this.limit = d.limit || this.limit;
       } finally {
         this.loading = false;
       }
+    },
+
+    goPage(n) {
+      this.page = n;
+      this.load();
     },
 
     fmtTime(ms) {
