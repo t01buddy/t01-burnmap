@@ -101,6 +101,32 @@ class TestQueryTools:
         assert rows == []
         assert total == 0
 
+    def test_q_filter_exact(self, db):
+        rows = query_tools(db, q="Write")
+        assert len(rows) == 1
+        assert rows[0]["name"] == "Write"
+
+    def test_q_filter_partial(self, db):
+        rows = query_tools(db, q="rea")
+        assert len(rows) == 1
+        assert rows[0]["name"] == "Read"
+
+    def test_q_filter_no_match(self, db):
+        rows = query_tools(db, q="nonexistent_tool_xyz")
+        assert rows == []
+
+    def test_q_and_agent_compose(self, db):
+        # Read exists for both agents, but codex only
+        rows = query_tools(db, q="Read", agent="codex")
+        assert len(rows) == 1
+        assert rows[0]["name"] == "Read"
+        assert rows[0]["calls"] == 1  # only codex call
+
+    def test_empty_q_returns_all(self, db):
+        rows_no_q = query_tools(db)
+        rows_empty_q = query_tools(db, q="")
+        assert len(rows_no_q) == len(rows_empty_q)
+
     def test_empty_db(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
