@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date, datetime, timezone
 from typing import Any
 
 try:
@@ -28,14 +29,27 @@ if _FASTAPI:
     def list_sessions(
         agent: str | None = Query(None, description="Filter by agent name"),
         search: str | None = Query(None, description="Filter by session id substring"),
+        started_from: str | None = Query(None, description="ISO date YYYY-MM-DD inclusive lower bound"),
+        started_to: str | None = Query(None, description="ISO date YYYY-MM-DD inclusive upper bound"),
         limit: int = Query(50, ge=1, le=1000),
         offset: int = Query(0, ge=0),
         db: sqlite3.Connection = Depends(_db),
     ) -> JSONResponse:
-        rows, total = query_sessions(db, agent=agent, search=search, limit=limit, offset=offset)
+        rows, total = query_sessions(
+            db, agent=agent, search=search,
+            started_from=started_from, started_to=started_to,
+            limit=limit, offset=offset,
+        )
         return JSONResponse({"sessions": rows, "total": total, "limit": limit, "offset": offset})
 else:
     router = None  # type: ignore[assignment]
+
+
+def _date_to_ms(d: str, end_of_day: bool = False) -> int:
+    """Convert YYYY-MM-DD to millisecond epoch. end_of_day=True adds 86399999ms."""
+    dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    ms = int(dt.timestamp() * 1000)
+    return ms + 86_399_999 if end_of_day else ms
 
 
 def query_sessions(
@@ -43,6 +57,8 @@ def query_sessions(
     *,
     agent: str | None = None,
     search: str | None = None,
+    started_from: str | None = None,
+    started_to: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
@@ -56,6 +72,12 @@ def query_sessions(
     if search:
         where_clauses.append("s.id LIKE ?")
         params.append(f"%{search}%")
+    if started_from:
+        where_clauses.append("s.started_at >= ?")
+        params.append(_date_to_ms(started_from))
+    if started_to:
+        where_clauses.append("s.started_at <= ?")
+        params.append(_date_to_ms(started_to, end_of_day=True))
 
     where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
