@@ -99,12 +99,14 @@ try:
             resp = client.get("/ping")
             assert resp.status_code == 401
 
-        def test_no_token_configured_passes_all(self, tmp_path, monkeypatch):
-            monkeypatch.setattr("burnmap.auth._TOKEN_FILE", tmp_path / "nonexistent")
+        def test_no_token_configured_returns_401_and_generates_token(self, tmp_path, monkeypatch):
+            token_file = tmp_path / "nonexistent"
+            monkeypatch.setattr("burnmap.auth._TOKEN_FILE", token_file)
             app = _make_app()
             client = TestClient(app, headers={"host": "remoteserver.example.com"}, raise_server_exceptions=False)
             resp = client.get("/ping")
-            assert resp.status_code == 200
+            assert resp.status_code == 401
+            assert token_file.exists()  # token was auto-generated
 
 except ImportError:
     pass  # FastAPI not installed in test env
