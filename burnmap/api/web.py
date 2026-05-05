@@ -118,7 +118,7 @@ if _FASTAPI:
 
     @router.get("/outliers", response_class=HTMLResponse)
     def outliers(request: Request) -> HTMLResponse:
-        return _html(request, "outliers.html")
+        return _html(request, "pages/outliers.html")
 
     @router.get("/quota", response_class=HTMLResponse)
     def quota(request: Request) -> HTMLResponse:
