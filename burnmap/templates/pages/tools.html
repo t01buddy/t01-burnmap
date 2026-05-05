@@ -35,7 +35,7 @@
         <tbody>
           <template x-for="t in rows" :key="t.name">
             <tr>
-              <td><b class="mono" x-text="t.name"></b></td>
+              <td><a class="mono tool-link" :href="'/tools/' + encodeURIComponent(t.name)" x-text="t.name"></a></td>
               <td class="num right" x-text="t.calls.toLocaleString()"></td>
               <td class="num right" x-text="fmtTok(t.total_input_tokens + t.total_output_tokens)"></td>
               <td class="num right" x-text="Math.round(t.avg_tokens_per_call).toLocaleString()"></td>
@@ -73,6 +73,8 @@
 .pager-btn { padding:4px 12px; border:1px solid var(--rule-soft,#ddd); border-radius:4px; background:none; cursor:pointer; }
 .pager-btn:disabled { opacity:0.4; cursor:default; }
 .pager-info { color:var(--ink-3,#888); }
+.tool-link { color:var(--accent,#0070f3); text-decoration:none; }
+.tool-link:hover { text-decoration:underline; }
 </style>
 
 <script>
