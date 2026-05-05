@@ -112,6 +112,10 @@ if _FASTAPI:
     def tools(request: Request) -> HTMLResponse:
         return _html(request, "pages/tools.html")
 
+    @router.get("/tools/{tool_name}", response_class=HTMLResponse)
+    def tool_detail(request: Request, tool_name: str) -> HTMLResponse:
+        return _html(request, "pages/tool_detail.html", tool_name=tool_name)
+
     @router.get("/sessions", response_class=HTMLResponse)
     def sessions(request: Request) -> HTMLResponse:
         return _html(request, "pages/sessions.html")
