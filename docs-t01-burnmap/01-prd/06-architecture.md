@@ -34,7 +34,6 @@
         │  Tree · Tools · Sessions         │
         │  Outliers · Export               │
         │  Settings (+ Provider sub-pages) │
-        │  Quotas · Live alerts            │
         └──────────────────────────────────┘
 ```
 

@@ -10,7 +10,6 @@ Sequential phases. Each ends with a shippable milestone.
 | **P2.5** | Span schema + ingest | 10–14 | `spans` / `trace_aggregates` / `tool_aggregates` tables |
 | **P2.75** | Tree reconstruction + subagent handling | 8–12 | parentUuid walker, sidechain merge, apportionment rules |
 | **P2.9** | Precision mode (Claude hooks) | 8–12 | Hook installer, Unix socket receiver, `span_events` merge |
-| **P3** | Quota engine + Claude panels | 6–10 | 5h / weekly rolling windows, P90 detection, UI |
 | **P4** | Prompts page + drill-down | 8–12 | List, filters, detail, histogram, outlier flags |
 | **P4.5** | Tree views: icicle + indented | 10–16 | Two views over one data source, loop-collapse rule |
 | **P5** | Tasks page + slash / skill extraction | 6–10 | Same shape as prompts, over `agent_tasks` |
