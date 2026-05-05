@@ -24,6 +24,8 @@
       <option value="codex">codex</option>
       <option value="aider">aider</option>
     </select>
+    <input class="date-input" type="date" x-model="dateFrom" @change="load()" title="From date"/>
+    <input class="date-input" type="date" x-model="dateTo" @change="load()" title="To date"/>
     <span class="spacer"></span>
     <span class="mono muted" style="font-size:11px;align-self:center"
           x-text="total + ' sessions'"></span>
@@ -107,6 +109,7 @@
 .chip--outlier { background:#fee2e2; color:#991b1b; }
 .session-id-link { color:var(--ink); text-decoration:none; }
 .session-id-link:hover { color:var(--accent,#0070f3); text-decoration:underline; cursor:pointer; }
+.date-input    { font-size:13px; padding:4px 8px; border:1px solid var(--rule-soft,#ddd); border-radius:4px; }
 </style>
 
 <script>
@@ -119,6 +122,8 @@ function sessionsPage() {
     loading: false,
     search: '',
     agentFilter: '',
+    dateFrom: '',
+    dateTo: '',
 
     async load() {
       this.loading = true;
@@ -127,6 +132,8 @@ function sessionsPage() {
         let url = `/api/sessions?limit=${this.limit}&offset=${offset}`;
         if (this.search) url += '&search=' + encodeURIComponent(this.search);
         if (this.agentFilter) url += '&agent=' + encodeURIComponent(this.agentFilter);
+        if (this.dateFrom) url += '&started_from=' + encodeURIComponent(this.dateFrom);
+        if (this.dateTo) url += '&started_to=' + encodeURIComponent(this.dateTo);
         const r = await fetch(url);
         const d = await r.json();
         this.rows  = d.sessions || [];
