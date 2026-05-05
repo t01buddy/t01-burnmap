@@ -11,6 +11,24 @@
     <span class="meta" style="font-size:12px;color:var(--ink-3)" x-text="total + ' tools'"></span>
   </div>
 
+  <!-- Search + filter controls -->
+  <div class="row" style="margin-bottom:14px;gap:8px;flex-wrap:wrap">
+    <input class="search-input"
+           type="search"
+           placeholder="Search tool name…"
+           x-model="search"
+           @input.debounce.250ms="load()"/>
+    <select class="sort-select" x-model="agentFilter" @change="load()">
+      <option value="">Agent: any</option>
+      <option value="claude_code">claude_code</option>
+      <option value="codex">codex</option>
+      <option value="aider">aider</option>
+    </select>
+    <span class="spacer"></span>
+    <span class="mono muted" style="font-size:11px;align-self:center"
+          x-text="rows.length + ' tools'"></span>
+  </div>
+
   <template x-if="loading">
     <div class="loading-row">Loading…</div>
   </template>
@@ -66,15 +84,17 @@
 </div>
 
 <style>
-.page-header { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
-.page-title  { font-size:20px; font-weight:600; }
-.loading-row { padding:40px; text-align:center; color:var(--ink-3,#888); font-size:14px; }
-.pager { display:flex; align-items:center; gap:12px; margin-top:16px; justify-content:center; font-size:13px; }
-.pager-btn { padding:4px 12px; border:1px solid var(--rule-soft,#ddd); border-radius:4px; background:none; cursor:pointer; }
+.page-header  { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+.page-title   { font-size:20px; font-weight:600; }
+.loading-row  { padding:40px; text-align:center; color:var(--ink-3,#888); font-size:14px; }
+.pager        { display:flex; align-items:center; gap:12px; margin-top:16px; justify-content:center; font-size:13px; }
+.pager-btn    { padding:4px 12px; border:1px solid var(--rule-soft,#ddd); border-radius:4px; background:none; cursor:pointer; }
 .pager-btn:disabled { opacity:0.4; cursor:default; }
-.pager-info { color:var(--ink-3,#888); }
-.tool-link { color:var(--accent,#0070f3); text-decoration:none; }
+.pager-info   { color:var(--ink-3,#888); }
+.tool-link    { color:var(--accent,#0070f3); text-decoration:none; }
 .tool-link:hover { text-decoration:underline; }
+.search-input { font-size:13px; padding:5px 10px; border:1px solid var(--rule-soft,#ddd); border-radius:4px; min-width:260px; }
+.sort-select  { font-size:13px; padding:4px 8px; border:1px solid var(--rule-soft,#ddd); border-radius:4px; }
 </style>
 
 <script>
@@ -86,6 +106,8 @@ function toolsPage() {
     total: 0,
     page: 1,
     loading: false,
+    search: '',
+    agentFilter: '',
 
     get totalPages() {
       return Math.max(1, Math.ceil(this.total / TOOLS_PAGE_SIZE));
@@ -95,7 +117,10 @@ function toolsPage() {
       this.loading = true;
       const offset = (this.page - 1) * TOOLS_PAGE_SIZE;
       try {
-        const r = await fetch(`/api/tools?limit=${TOOLS_PAGE_SIZE}&offset=${offset}`);
+        let url = `/api/tools?limit=${TOOLS_PAGE_SIZE}&offset=${offset}`;
+        if (this.search) url += '&q=' + encodeURIComponent(this.search);
+        if (this.agentFilter) url += '&agent=' + encodeURIComponent(this.agentFilter);
+        const r = await fetch(url);
         const d = await r.json();
         this.rows = d.tools || [];
         this.total = d.total || 0;
