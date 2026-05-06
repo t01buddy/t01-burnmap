@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 try:
-    from fastapi import APIRouter, Depends, Query
+    from fastapi import APIRouter, Depends, HTTPException, Query
     from fastapi.responses import JSONResponse
     _FASTAPI = True
 except ImportError:
@@ -35,19 +35,28 @@ if _FASTAPI:
         offset: int = Query(0, ge=0),
         db: sqlite3.Connection = Depends(_db),
     ) -> JSONResponse:
-        rows, total = query_sessions(
-            db, agent=agent, search=search,
-            started_from=started_from, started_to=started_to,
-            limit=limit, offset=offset,
-        )
+        try:
+            rows, total = query_sessions(
+                db, agent=agent, search=search,
+                started_from=started_from, started_to=started_to,
+                limit=limit, offset=offset,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         return JSONResponse({"sessions": rows, "total": total, "limit": limit, "offset": offset})
 else:
     router = None  # type: ignore[assignment]
 
 
 def _date_to_ms(d: str, end_of_day: bool = False) -> int:
-    """Convert YYYY-MM-DD to millisecond epoch. end_of_day=True adds 86399999ms."""
-    dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    """Convert YYYY-MM-DD to millisecond epoch. end_of_day=True adds 86399999ms.
+
+    Raises ValueError for invalid date strings.
+    """
+    try:
+        dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise ValueError(f"Invalid date '{d}': expected YYYY-MM-DD")
     ms = int(dt.timestamp() * 1000)
     return ms + 86_399_999 if end_of_day else ms
 
