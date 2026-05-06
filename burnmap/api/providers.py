@@ -1,11 +1,14 @@
 """/api/providers — per-provider stats, sessions, config detail."""
 from __future__ import annotations
 
+import json
+import os
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, Depends, HTTPException
+    from fastapi import APIRouter, Body, Depends, HTTPException
     from fastapi.responses import JSONResponse
     _FASTAPI = True
 except ImportError:
@@ -14,6 +17,36 @@ except ImportError:
 
 from burnmap.db.schema import get_db
 from burnmap.api.onboarding import discover_adapters
+
+_CUSTOM_PROVIDERS_FILE = Path.home() / ".t01-burnmap" / "custom_providers.json"
+
+
+def _load_custom() -> dict[str, str]:
+    """Return {agent: path} for user-added providers."""
+    if _CUSTOM_PROVIDERS_FILE.exists():
+        try:
+            return json.loads(_CUSTOM_PROVIDERS_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def _save_custom(data: dict[str, str]) -> None:
+    _CUSTOM_PROVIDERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _CUSTOM_PROVIDERS_FILE.write_text(json.dumps(data, indent=2))
+
+
+def discover_all_adapters() -> list[dict[str, Any]]:
+    """Built-in adapters merged with user-added custom providers."""
+    result = discover_adapters()
+    known = {a["agent"] for a in result}
+    for agent, path in _load_custom().items():
+        if agent not in known:
+            found = os.path.exists(path)
+            result.append({"agent": agent, "found": found, "path": path if found else None,
+                           "checked_paths": [path], "custom": True})
+    return result
+
 
 if _FASTAPI:
     router = APIRouter()
@@ -28,12 +61,52 @@ if _FASTAPI:
     @router.get("/api/providers")
     def providers_list() -> JSONResponse:
         """Return all discovered providers for the topbar agent filter."""
-        return JSONResponse({"providers": discover_adapters()})
+        return JSONResponse({"providers": discover_all_adapters()})
+
+    @router.post("/api/providers")
+    def provider_add(
+        agent: str = Body(..., embed=True),
+        path: str = Body(..., embed=True),
+    ) -> JSONResponse:
+        """Register a custom provider by name and log path."""
+        if not agent or not agent.replace("_", "").isalnum():
+            raise HTTPException(status_code=400, detail="agent must be alphanumeric (underscores allowed)")
+        custom = _load_custom()
+        custom[agent] = path
+        _save_custom(custom)
+        found = os.path.exists(path)
+        return JSONResponse({"ok": True, "agent": agent, "path": path, "found": found}, status_code=201)
+
+    @router.delete("/api/providers/{agent}")
+    def provider_remove(agent: str) -> JSONResponse:
+        """Remove a user-added custom provider."""
+        custom = _load_custom()
+        if agent not in custom:
+            raise HTTPException(status_code=404, detail=f"Custom provider '{agent}' not found")
+        del custom[agent]
+        _save_custom(custom)
+        return JSONResponse({"ok": True, "removed": agent})
+
+    @router.post("/api/providers/{agent}/rescan")
+    def provider_rescan(agent: str) -> JSONResponse:
+        """Re-run path discovery for a provider and return fresh status."""
+        adapters = discover_all_adapters()
+        adapter = next((a for a in adapters if a["agent"] == agent), None)
+        if adapter is None:
+            raise HTTPException(status_code=404, detail=f"Unknown provider '{agent}'")
+        # Re-check existence of each candidate path
+        found_path = None
+        for p in adapter.get("checked_paths", []):
+            if os.path.exists(p):
+                found_path = p
+                break
+        return JSONResponse({"agent": agent, "found": found_path is not None, "path": found_path,
+                             "checked_paths": adapter.get("checked_paths", [])})
 
     @router.get("/api/providers/{agent}")
     def provider_detail(agent: str, db: sqlite3.Connection = Depends(_db)) -> JSONResponse:
         """Return config + stats + recent sessions for a single provider."""
-        adapters = discover_adapters()
+        adapters = discover_all_adapters()
         if not any(a["agent"] == agent for a in adapters):
             raise HTTPException(status_code=404, detail=f"Unknown provider '{agent}'")
         return JSONResponse(query_provider_detail(db, agent))
@@ -59,7 +132,7 @@ def query_provider_detail(conn: sqlite3.Connection, agent: str) -> dict[str, Any
     Always returns a dict — caller decides how to render missing data.
     """
     # Adapter discovery info
-    adapters = discover_adapters()
+    adapters = discover_all_adapters()
     adapter = next((a for a in adapters if a["agent"] == agent), None)
     found = adapter["found"] if adapter else False
     path = adapter["path"] if adapter else None
