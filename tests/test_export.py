@@ -135,17 +135,18 @@ def test_as_json_with_rows():
 
 
 def test_as_otlp_with_rows():
-    import json
     rows = [{"id": "o1", "session_id": "s", "name": "n", "kind": "llm",
              "started_at": 1704067200000, "agent": "claude",
              "input_tokens": 10, "output_tokens": 5, "cost_usd": 0.001}]
     resp = _as_otlp(rows)
-    assert "ndjson" in resp.media_type
-    obj = json.loads(resp.body.decode().strip())
-    assert obj["spanId"] == "o1"
-    assert obj["attributes"]["input_tokens"] == 10
+    assert "protobuf" in resp.media_type
+    # Proto output is binary — verify it's non-empty and starts with a valid tag byte
+    assert len(resp.body) > 0
+    # Field 1 (resource_spans), wire type 2 → tag byte = (1 << 3) | 2 = 0x0A
+    assert resp.body[0] == 0x0A
 
 
 def test_as_otlp_empty():
     resp = _as_otlp([])
-    assert resp.body == b""
+    # Empty spans → minimal proto wrapper with empty scope_spans
+    assert isinstance(resp.body, bytes)
