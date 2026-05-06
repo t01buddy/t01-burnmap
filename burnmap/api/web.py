@@ -114,7 +114,16 @@ if _FASTAPI:
 
     @router.get("/tools/{tool_name}", response_class=HTMLResponse)
     def tool_detail(request: Request, tool_name: str) -> HTMLResponse:
-        return _html(request, "pages/tool_detail.html", tool_name=tool_name)
+        from burnmap.api.tools import query_tool_aggregate
+        from burnmap.db.schema import get_db
+        db = get_db()
+        try:
+            if query_tool_aggregate(db, tool_name) is None:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=404, detail="Tool not found")
+            return _html(request, "pages/tool_detail.html", tool_name=tool_name)
+        finally:
+            db.close()
 
     @router.get("/sessions", response_class=HTMLResponse)
     def sessions(request: Request) -> HTMLResponse:
