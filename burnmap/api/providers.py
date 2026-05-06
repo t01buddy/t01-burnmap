@@ -5,7 +5,7 @@ import sqlite3
 from typing import Any
 
 try:
-    from fastapi import APIRouter, Depends
+    from fastapi import APIRouter, Depends, HTTPException
     from fastapi.responses import JSONResponse
     _FASTAPI = True
 except ImportError:
@@ -33,6 +33,9 @@ if _FASTAPI:
     @router.get("/api/providers/{agent}")
     def provider_detail(agent: str, db: sqlite3.Connection = Depends(_db)) -> JSONResponse:
         """Return config + stats + recent sessions for a single provider."""
+        adapters = discover_adapters()
+        if not any(a["agent"] == agent for a in adapters):
+            raise HTTPException(status_code=404, detail=f"Unknown provider '{agent}'")
         return JSONResponse(query_provider_detail(db, agent))
 else:
     router = None  # type: ignore[assignment]
