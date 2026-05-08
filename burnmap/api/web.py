@@ -104,7 +104,8 @@ if _FASTAPI:
                 if trace:
                     return _html(request, "pages/trace_tree.html", trace=trace)
             # Fallback: render with empty trace
-            return _html(request, "pages/trace_tree.html", trace={"id": None, "label": "No traces", "total_tokens": 0, "total_cost": 0, "turns": 0, "tools": 0, "tree": []})
+            empty_tree = {"id": None, "label": "No traces", "kind": "session", "tokens": 0, "cost": 0.0, "loop": False, "started_at": 0, "ended_at": 0, "children": []}
+            return _html(request, "pages/trace_tree.html", trace={"id": None, "label": "No traces", "total_tokens": 0, "total_cost": 0, "duration_ms": 0, "turns": 0, "tools": 0, "tree": empty_tree})
         finally:
             db.close()
 
