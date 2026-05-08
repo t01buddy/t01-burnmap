@@ -133,6 +133,11 @@ if _FASTAPI:
     def outliers(request: Request) -> HTMLResponse:
         return _html(request, "pages/outliers.html")
 
+    @router.get("/alerts", response_class=HTMLResponse)
+    def alerts(request: Request) -> HTMLResponse:
+        """Outlier review page — all flagged runs, sortable by sigma (PRD P1)."""
+        return _html(request, "pages/outliers.html")
+
     @router.get("/settings", response_class=HTMLResponse)
     def settings(request: Request) -> HTMLResponse:
         return _html(request, "pages/settings.html")
