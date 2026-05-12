@@ -263,8 +263,22 @@ function providerDetailPage() {
       }
     },
 
-    installHooks() { this.hooksStatus = "installing…"; setTimeout(() => { this.hooksStatus = "installed"; }, 800); },
-    dryRunHooks() { this.hooksStatus = "dry-run ok"; },
+    async installHooks() {
+      this.hooksStatus = "installing…";
+      try {
+        const r = await fetch("/api/hooks/install", { method: "POST" });
+        const d = await r.json();
+        this.hooksStatus = d.ok ? (d.action === "already_installed" ? "already installed" : "installed") : ("error: " + d.error);
+      } catch { this.hooksStatus = "error"; }
+    },
+    async dryRunHooks() {
+      this.hooksStatus = "checking…";
+      try {
+        const r = await fetch("/api/hooks/dry-run", { method: "POST" });
+        const d = await r.json();
+        this.hooksStatus = d.ok ? ("dry-run ok · " + d.action) : ("error: " + d.error);
+      } catch { this.hooksStatus = "error"; }
+    },
 
     fmtTok(n) {
       if (!n) return "0";

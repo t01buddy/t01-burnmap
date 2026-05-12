@@ -48,6 +48,55 @@ def discover_all_adapters() -> list[dict[str, Any]]:
     return result
 
 
+_HOOK_SCRIPT = (
+    "~/.t01-burnmap/hook.sh"
+)
+_SOCKET_PATH = "~/.t01-burnmap/hook.sock"
+_HOOK_ENTRY = {
+    "matcher": ".*",
+    "hooks": [
+        {
+            "type": "command",
+            "command": f"bash -c 'echo \"$CLAUDE_TOOL_NAME $CLAUDE_TOOL_PHASE\" | timeout 0.05 socat - UNIX-CONNECT:{_SOCKET_PATH} 2>/dev/null; true'",
+        }
+    ],
+}
+
+
+def _write_hooks_config(dry_run: bool = False) -> dict[str, Any]:
+    """Write or preview a PreToolUse hook entry in ~/.claude/settings.json.
+
+    Returns a dict with keys: ok, dry_run, config_path, action, hook_entry.
+    On error returns ok=False with an error key.
+    """
+    config_path = Path.home() / ".claude" / "settings.json"
+    try:
+        existing: dict[str, Any] = json.loads(config_path.read_text()) if config_path.exists() else {}
+    except (json.JSONDecodeError, OSError) as exc:
+        return {"ok": False, "error": f"Could not read {config_path}: {exc}"}
+
+    hooks_list: list[dict[str, Any]] = existing.setdefault("hooks", {}).setdefault("PreToolUse", [])
+    # Idempotent: skip if our socket is already referenced
+    already_installed = any(_SOCKET_PATH in json.dumps(h) for h in hooks_list)
+    action = "already_installed" if already_installed else ("preview" if dry_run else "written")
+
+    if not already_installed and not dry_run:
+        hooks_list.append(_HOOK_ENTRY)
+        try:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(json.dumps(existing, indent=2))
+        except OSError as exc:
+            return {"ok": False, "error": f"Could not write {config_path}: {exc}"}
+
+    return {
+        "ok": True,
+        "dry_run": dry_run,
+        "config_path": str(config_path),
+        "action": action,
+        "hook_entry": _HOOK_ENTRY if not already_installed else None,
+    }
+
+
 if _FASTAPI:
     router = APIRouter()
 
@@ -110,6 +159,19 @@ if _FASTAPI:
         if not any(a["agent"] == agent for a in adapters):
             raise HTTPException(status_code=404, detail=f"Unknown provider '{agent}'")
         return JSONResponse(query_provider_detail(db, agent))
+
+    @router.post("/api/hooks/install")
+    def hooks_install() -> JSONResponse:
+        """Write the Claude Code precision-mode hook config to ~/.claude/settings.json."""
+        result = _write_hooks_config(dry_run=False)
+        return JSONResponse(result)
+
+    @router.post("/api/hooks/dry-run")
+    def hooks_dry_run() -> JSONResponse:
+        """Preview the hook config change without writing to disk."""
+        result = _write_hooks_config(dry_run=True)
+        return JSONResponse(result)
+
 else:
     router = None  # type: ignore[assignment]
 
