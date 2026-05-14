@@ -10,6 +10,8 @@ Token bills are not observability. `t01-burnmap` is designed to show where spend
 
 ## Docs
 
+- **Manual:** [`docs/manual.md`](./docs/manual.md)
+- **Showcases:** [`docs/showcases.md`](./docs/showcases.md)
 - **PRD:** [`docs-t01-burnmap/01-prd/`](./docs-t01-burnmap/01-prd/)
 - **Mockups:** [`docs-t01-burnmap/mockups/`](./docs-t01-burnmap/mockups/)
 
