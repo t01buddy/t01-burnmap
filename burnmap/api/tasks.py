@@ -26,7 +26,7 @@ if _FASTAPI:
 
     @router.get("/api/tasks")
     def list_tasks(
-        kind: str | None = Query(None, description="Filter by kind: slash|skill|subagent"),
+        kind: str | None = Query(None, pattern="^(slash|skill|subagent)$", description="Filter by kind: slash|skill|subagent"),
         agent: str | None = Query(None, description="Filter by agent name"),
         limit: int = Query(100, ge=1, le=1000),
         db: sqlite3.Connection = Depends(_db),
