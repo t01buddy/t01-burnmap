@@ -2,8 +2,10 @@
 import sqlite3
 
 import pytest
+from fastapi.testclient import TestClient
 
 from burnmap.api.tasks import query_tasks, _VALID_KINDS
+from burnmap.app import create_app
 from burnmap.db.schema import init_db
 
 
@@ -118,3 +120,16 @@ class TestQueryTasks:
         init_db(conn)
         assert query_tasks(conn) == []
         conn.close()
+
+
+class TestTasksRoute:
+    def test_invalid_kind_returns_422(self):
+        client = TestClient(create_app(), headers={"host": "localhost"})
+        resp = client.get("/api/tasks?kind=invalid")
+        assert resp.status_code == 422
+
+    def test_valid_kind_returns_200(self):
+        client = TestClient(create_app(), headers={"host": "localhost"})
+        resp = client.get("/api/tasks?kind=slash")
+        assert resp.status_code == 200
+        assert "tasks" in resp.json()
