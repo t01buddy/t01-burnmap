@@ -161,8 +161,15 @@ if _FASTAPI:
         return JSONResponse(query_provider_detail(db, agent))
 
     @router.post("/api/hooks/install")
-    def hooks_install() -> JSONResponse:
-        """Write the Claude Code precision-mode hook config to ~/.claude/settings.json."""
+    def hooks_install(
+        confirm: bool = Body(..., embed=True),
+    ) -> JSONResponse:
+        """Write the Claude Code precision-mode hook config to ~/.claude/settings.json.
+
+        Requires confirm=true in request body to prevent accidental writes.
+        """
+        if not confirm:
+            raise HTTPException(status_code=400, detail="confirm=true required to write settings.json")
         result = _write_hooks_config(dry_run=False)
         return JSONResponse(result)
 
