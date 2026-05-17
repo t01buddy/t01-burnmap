@@ -299,6 +299,57 @@ class TestTraceTreeTemplate:
         out = tmpl.render(trace=trace)
         assert "indent-row" in out
 
+    def test_toggle_button_present_for_node_with_children(self, env):
+        """Nodes with children should have a collapse toggle button."""
+        child = Span(id="c1", label="Read", kind="tool", tokens=50, cost=0.0005,
+                     attribution="exact")
+        root = Span(id="r1", label="root", kind="turn", tokens=100, cost=0.001,
+                    attribution="exact", children=[child])
+        trace = Trace(id="t", label="root", total_tokens=100, total_cost=0.001,
+                      duration_ms=0, turns=1, tools=1, tree=root)
+        tmpl = env.get_template("pages/trace_tree.html")
+        out = tmpl.render(trace=trace)
+        assert "indent-toggle" in out
+        assert "indent-chevron" in out
+
+    def test_no_toggle_for_leaf_node(self, env):
+        """Leaf nodes (no children) should not have a toggle button, only a spacer."""
+        root = Span(id="r1", label="root", kind="turn", tokens=100, cost=0.001,
+                    attribution="exact", children=[])
+        trace = Trace(id="t", label="root", total_tokens=100, total_cost=0.001,
+                      duration_ms=0, turns=1, tools=0, tree=root)
+        tmpl = env.get_template("pages/trace_tree.html")
+        out = tmpl.render(trace=trace)
+        assert "indent-toggle-spacer" in out
+        # No toggle button (class "indent-toggle" as element, not just CSS definition)
+        assert 'class="indent-toggle"' not in out
+
+    def test_alpine_open_state_default_expanded(self, env):
+        """Each node wrapper should use Alpine x-data with open:true default."""
+        child = Span(id="c1", label="Read", kind="tool", tokens=50, cost=0.0005,
+                     attribution="exact")
+        root = Span(id="r1", label="root", kind="turn", tokens=100, cost=0.001,
+                    attribution="exact", children=[child])
+        trace = Trace(id="t", label="root", total_tokens=100, total_cost=0.001,
+                      duration_ms=0, turns=1, tools=1, tree=root)
+        tmpl = env.get_template("pages/trace_tree.html")
+        out = tmpl.render(trace=trace)
+        assert "open: true" in out
+        assert "x-show=\"open\"" in out
+
+    def test_keyboard_toggle_attributes_present(self, env):
+        """Toggle button should have keyboard event handlers for Enter and Space."""
+        child = Span(id="c1", label="Read", kind="tool", tokens=50, cost=0.0005,
+                     attribution="exact")
+        root = Span(id="r1", label="root", kind="turn", tokens=100, cost=0.001,
+                    attribution="exact", children=[child])
+        trace = Trace(id="t", label="root", total_tokens=100, total_cost=0.001,
+                      duration_ms=0, turns=1, tools=1, tree=root)
+        tmpl = env.get_template("pages/trace_tree.html")
+        out = tmpl.render(trace=trace)
+        assert "keydown.enter" in out
+        assert "keydown.space" in out
+
 
 # ── Smoke: query_trace output renders the trace_tree template without error ───
 
