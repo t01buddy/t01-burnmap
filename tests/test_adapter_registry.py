@@ -1,41 +1,53 @@
-"""Tests for BaseAdapter ABC and AdapterRegistry."""
+"""Tests for BaseAdapter interface and AdapterRegistry."""
 from pathlib import Path
 from typing import Any
 import pytest
-from burnmap.adapters import BaseAdapter, AdapterRegistry
+from burnmap.adapters import BaseAdapter, AdapterRegistry, NormalizedTurn
 
 
 class MockAdapter(BaseAdapter):
-    def default_paths(self) -> list[Path]:
-        return [Path("/tmp/mock-logs")]
+    agent = "mock"
 
-    def is_supported_file(self, path: Path) -> bool:
-        return path.suffix == ".json"
+    def default_paths(self) -> list[str]:
+        return ["/tmp/mock-logs/*.json"]
 
-    def parse_file(self, path: Path) -> list[dict[str, Any]]:
-        return [{"mock": True, "path": str(path)}]
+    def is_supported_file(self, path: str) -> bool:
+        return path.endswith(".json")
+
+    def detect_format_version(self, record: dict[str, Any]) -> int:
+        return 1
+
+    def parse(self, path: str) -> list[NormalizedTurn]:
+        return []
 
 
-def test_base_adapter_is_abstract() -> None:
-    with pytest.raises(TypeError):
-        BaseAdapter()  # type: ignore[abstract]
+def test_base_adapter_methods_raise_not_implemented() -> None:
+    adapter = BaseAdapter()
+    with pytest.raises(NotImplementedError):
+        adapter.default_paths()
+    with pytest.raises(NotImplementedError):
+        adapter.is_supported_file("log.json")
+    with pytest.raises(NotImplementedError):
+        adapter.detect_format_version({})
+    with pytest.raises(NotImplementedError):
+        adapter.parse("log.json")
 
 
 def test_mock_adapter_default_paths() -> None:
     adapter = MockAdapter()
-    assert Path("/tmp/mock-logs") in adapter.default_paths()
+    assert "/tmp/mock-logs/*.json" in adapter.default_paths()
 
 
 def test_mock_adapter_is_supported_file() -> None:
     adapter = MockAdapter()
-    assert adapter.is_supported_file(Path("log.json"))
-    assert not adapter.is_supported_file(Path("log.txt"))
+    assert adapter.is_supported_file("log.json")
+    assert not adapter.is_supported_file("log.txt")
 
 
-def test_mock_adapter_parse_file(tmp_path: Path) -> None:
+def test_mock_adapter_parse() -> None:
     adapter = MockAdapter()
-    result = adapter.parse_file(tmp_path / "log.json")
-    assert result[0]["mock"] is True
+    result = adapter.parse("/tmp/log.json")
+    assert result == []
 
 
 def test_registry_register_and_get() -> None:
