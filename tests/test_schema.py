@@ -64,9 +64,9 @@ class TestCoreTables:
     def test_spans_crud_with_parent(self, conn):
         conn.execute("INSERT INTO sessions VALUES ('s1', 'claude_code', 0, 0)")
         conn.execute("""INSERT INTO spans
-            VALUES ('sp1', 's1', 'claude_code', 'turn', 'main', NULL, 5, 10, 0.001, 100, 200, 0)""")
+            VALUES ('sp1', 's1', 'claude_code', 'turn', 'main', NULL, 5, 10, 0.001, 100, 200, 0, NULL)""")
         conn.execute("""INSERT INTO spans
-            VALUES ('sp2', 's1', 'claude_code', 'tool', 'Bash', 'sp1', 2, 3, 0.0005, 110, 150, 0)""")
+            VALUES ('sp2', 's1', 'claude_code', 'tool', 'Bash', 'sp1', 2, 3, 0.0005, 110, 150, 0, NULL)""")
         conn.commit()
         parent = conn.execute("SELECT parent_id FROM spans WHERE id='sp2'").fetchone()[0]
         assert parent == "sp1"
@@ -87,7 +87,7 @@ class TestCoreTables:
     def test_span_events_crud(self, conn):
         conn.execute("INSERT INTO sessions VALUES ('s1', 'claude_code', 0, 0)")
         conn.execute("""INSERT INTO spans
-            VALUES ('sp1', 's1', 'claude_code', 'turn', 'main', NULL, 0, 0, 0.0, 0, 0, 0)""")
+            VALUES ('sp1', 's1', 'claude_code', 'turn', 'main', NULL, 0, 0, 0.0, 0, 0, 0, NULL)""")
         conn.execute("INSERT INTO span_events VALUES ('ev1', 'sp1', 'hook_start', '{\"k\":1}', 100)")
         conn.commit()
         row = conn.execute("SELECT * FROM span_events WHERE id='ev1'").fetchone()

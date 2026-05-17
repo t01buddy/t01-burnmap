@@ -127,7 +127,7 @@ def query_trace(
         dict(r)
         for r in conn.execute(
             """SELECT id, parent_id, kind, name, input_tokens, output_tokens,
-                      cost_usd, started_at, ended_at, is_outlier
+                      cost_usd, started_at, ended_at, is_outlier, model
                FROM spans WHERE session_id = ? ORDER BY started_at ASC""",
             (session_id,),
         ).fetchall()
