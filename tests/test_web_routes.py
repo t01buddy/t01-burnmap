@@ -92,3 +92,15 @@ def test_trace_detail_returns_404_for_missing_trace(client):
     ):
         resp = client.get("/trace/nonexistent-id")
     assert resp.status_code == 404
+
+
+def test_sidebar_sessions_before_prompts(client):
+    """Sessions nav link should appear before Prompts in the sidebar."""
+    resp = client.get("/prompts")
+    assert resp.status_code == 200
+    html = resp.text
+    sessions_pos = html.find('href="/sessions"')
+    prompts_pos = html.find('href="/prompts"')
+    assert sessions_pos != -1, "Sessions link missing"
+    assert prompts_pos != -1, "Prompts link missing"
+    assert sessions_pos < prompts_pos, "Sessions should appear before Prompts in sidebar"
