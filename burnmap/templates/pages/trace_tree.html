@@ -62,27 +62,46 @@
   "loop_block": "var(--alert)",
 } %}
 {% set dot_color = kind_dots.get(node.kind, "#94a3b8") %}
-<div class="indent-row"
-     style="padding-left: {{ depth * 18 + 8 }}px;"
-     :class="selectedId === '{{ node.id }}' ? 'indent-row--selected' : ''"
-     @click="select('{{ node.id }}')">
-  <i class="wf-dot" style="background: {{ dot_color }}; flex-shrink: 0;"></i>
-  <span class="indent-name mono">{{ node.label if node.label else node.name }}</span>
-  {% if node.kind == "loop_block" %}
-    <span class="loop-badge">loop ×{{ node.count }}</span>
-    <span class="indent-stats mono muted">mean ${{ "%.4f"|format(node.mean_cost if node.mean_cost else 0) }} σ{{ "%.4f"|format(node.stdev_cost if node.stdev_cost else 0) }}</span>
-  {% else %}
-    <span class="attr-tag attr-tag--{{ node.attribution if node.attribution else 'inherited' }}">{{ node.attribution if node.attribution else 'inherited' }}</span>
-    <span class="indent-cost-bar">
-      {% set tok = node.tokens if node.tokens else 0 %}
-      <span class="indent-cost-fill" style="width: {{ [(tok / 10), 120] | min }}px;"></span>
-    </span>
-    <span class="indent-stats mono muted">{{ tok }} tok · ${{ "%.4f"|format(node.cost if node.cost else 0) }}{% if node.model %} · <span style="color: var(--ink-3); max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom;" title="{{ node.model }}">{{ node.model }}</span>{% endif %}</span>
+{% set has_children = node.children | length > 0 %}
+<div x-data="{ open: true }">
+  <div class="indent-row"
+       style="padding-left: {{ depth * 18 + 8 }}px;"
+       :class="selectedId === '{{ node.id }}' ? 'indent-row--selected' : ''"
+       @click="select('{{ node.id }}')">
+    {% if has_children %}
+    <button class="indent-toggle"
+            @click.stop="open = !open"
+            @keydown.enter.stop="open = !open"
+            @keydown.space.prevent.stop="open = !open"
+            :aria-expanded="open"
+            aria-label="toggle children">
+      <span class="indent-chevron" :class="open ? 'indent-chevron--open' : ''">▶</span>
+    </button>
+    {% else %}
+    <span class="indent-toggle-spacer"></span>
+    {% endif %}
+    <i class="wf-dot" style="background: {{ dot_color }}; flex-shrink: 0;"></i>
+    <span class="indent-name mono">{{ node.label if node.label else node.name }}</span>
+    {% if node.kind == "loop_block" %}
+      <span class="loop-badge">loop ×{{ node.count }}</span>
+      <span class="indent-stats mono muted">mean ${{ "%.4f"|format(node.mean_cost if node.mean_cost else 0) }} σ{{ "%.4f"|format(node.stdev_cost if node.stdev_cost else 0) }}</span>
+    {% else %}
+      <span class="attr-tag attr-tag--{{ node.attribution if node.attribution else 'inherited' }}">{{ node.attribution if node.attribution else 'inherited' }}</span>
+      <span class="indent-cost-bar">
+        {% set tok = node.tokens if node.tokens else 0 %}
+        <span class="indent-cost-fill" style="width: {{ [(tok / 10), 120] | min }}px;"></span>
+      </span>
+      <span class="indent-stats mono muted">{{ tok }} tok · ${{ "%.4f"|format(node.cost if node.cost else 0) }}{% if node.model %} · <span style="color: var(--ink-3); max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom;" title="{{ node.model }}">{{ node.model }}</span>{% endif %}</span>
+    {% endif %}
+  </div>
+  {% if has_children %}
+  <div x-show="open">
+    {% for child in node.children %}
+      {{ indent_node(child, depth + 1) }}
+    {% endfor %}
+  </div>
   {% endif %}
 </div>
-{% for child in node.children %}
-  {{ indent_node(child, depth + 1) }}
-{% endfor %}
 {% endmacro %}
 
 <div class="page" style="max-width: none;" x-data="traceTreePage()" x-init="init()">
@@ -176,6 +195,11 @@
 .indent-cost-bar   { width: 120px; height: 6px; background: var(--rule-soft); border-radius: 3px; flex-shrink: 0; }
 .indent-cost-fill  { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
 .loop-badge        { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; background: var(--alert); color: #fff; font-family: var(--font-mono); flex-shrink: 0; }
+.indent-toggle     { background: none; border: none; padding: 0; cursor: pointer; width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--ink-3); }
+.indent-toggle:focus-visible { outline: 1px solid var(--accent); border-radius: 2px; }
+.indent-toggle-spacer { width: 14px; flex-shrink: 0; }
+.indent-chevron    { font-size: 8px; transition: transform 0.15s; display: inline-block; }
+.indent-chevron--open { transform: rotate(90deg); }
 
 /* ── Attribution tags ── */
 .attr-tag          { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 9.5px; font-family: var(--font-mono); flex-shrink: 0; }
