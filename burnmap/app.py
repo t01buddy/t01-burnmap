@@ -47,6 +47,43 @@ def _collect_watch_paths() -> list[str]:
     return paths
 
 
+async def _watch_and_ingest(watcher: Watcher) -> None:
+    """Subscribe to watcher events and trigger backfill on each file change."""
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    from burnmap.api.backfill import run_backfill
+    from burnmap.db import get_db
+
+    q = watcher.subscribe()
+    _DEBOUNCE = 2.0  # seconds — coalesce rapid writes into one ingest
+    try:
+        while True:
+            await q.get()  # wait for first event
+            # Drain any queued events within the debounce window
+            await asyncio.sleep(_DEBOUNCE)
+            while not q.empty():
+                q.get_nowait()
+
+            logger.info("Watcher: file change detected — running backfill")
+            db = get_db()
+            try:
+                loop = asyncio.get_running_loop()
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    result = await loop.run_in_executor(pool, run_backfill, db)
+                logger.info(
+                    "Watcher ingest complete: sessions=%d spans=%d",
+                    result.get("sessions_ingested", 0),
+                    result.get("spans_ingested", 0),
+                )
+            except Exception:
+                logger.exception("Watcher-triggered backfill failed")
+            finally:
+                db.close()
+    except asyncio.CancelledError:
+        watcher.unsubscribe(q)
+        raise
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start watcher on startup, stop on shutdown."""
@@ -98,11 +135,19 @@ async def lifespan(app: FastAPI):
 
     watcher = Watcher()
     watch_paths = _collect_watch_paths()
+    ingest_task = None
     if watch_paths:
         watcher.start(watch_paths)
         logger.info("Watcher started on %d paths", len(watch_paths))
+        ingest_task = asyncio.ensure_future(_watch_and_ingest(watcher))
     app.state.watcher = watcher
     yield
+    if ingest_task is not None:
+        ingest_task.cancel()
+        try:
+            await ingest_task
+        except asyncio.CancelledError:
+            pass
     watcher.stop()
     logger.info("Watcher stopped")
 
