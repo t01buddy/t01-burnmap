@@ -8,4 +8,4 @@
 
 - **Aider multi-repo walk.** Default `$HOME` depth 3, or force explicit config? Leaning explicit.
 
-- **Waterfall view data.** Span start/end timestamps needed for Gantt-style waterfall. Confirm adapters can extract absolute timestamps, or fall back to token-proportional offsets.
+- ~~**Waterfall view data.**~~ Dropped — waterfall tab removed; indented tree is the only trace visualization.

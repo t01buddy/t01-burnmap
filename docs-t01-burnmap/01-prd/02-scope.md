@@ -6,7 +6,7 @@
 - **Provider management** — Settings > Providers list with detail sub-pages. Add/configure/rescan/remove. Global agent filter in topbar.
 - **Prompt fingerprinting** — SHA-256 over normalized text. Aggregation table: run count, tokens, cost, agents, projects.
 - **Tree reconstruction** — OpenTelemetry-aligned spans (prompt -> turn -> tool -> subagent -> recurse).
-- **Icicle + indented tree views** — two complementary visualizations, synced selection.
+- **Indented tree view** — span hierarchy with collapsible rows and synced selection.
 - **Attribution labels** — `exact` / `apportioned` / `inherited` as colored badges (green / amber / gray) on each span.
 - **Content-mode privacy** — two modes (`preview` default, `full` opt-in). SHA-256 fingerprint always stored. One-command wipe drops snippets; fingerprints and aggregates are preserved.
 - **Cost estimation** — effective-dated LiteLLM pricing. Subscription runs labeled synthetic, API runs labeled real.
