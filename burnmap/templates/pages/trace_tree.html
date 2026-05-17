@@ -77,7 +77,7 @@
       {% set tok = node.tokens if node.tokens else 0 %}
       <span class="indent-cost-fill" style="width: {{ [(tok / 10), 120] | min }}px;"></span>
     </span>
-    <span class="indent-stats mono muted">{{ tok }} tok · ${{ "%.4f"|format(node.cost if node.cost else 0) }}</span>
+    <span class="indent-stats mono muted">{{ tok }} tok · ${{ "%.4f"|format(node.cost if node.cost else 0) }}{% if node.model %} · <span style="color: var(--ink-3); max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom;" title="{{ node.model }}">{{ node.model }}</span>{% endif %}</span>
   {% endif %}
 </div>
 {% for child in node.children %}

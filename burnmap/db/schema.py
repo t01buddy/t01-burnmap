@@ -146,6 +146,8 @@ def init_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE spans ADD COLUMN ended_at INTEGER DEFAULT 0")
     if "is_outlier" not in cols:
         conn.execute("ALTER TABLE spans ADD COLUMN is_outlier INTEGER DEFAULT 0")
+    if "model" not in cols:
+        conn.execute("ALTER TABLE spans ADD COLUMN model TEXT")
     # Additive migration: agents/projects columns on prompts (for upgraded DBs)
     prompt_cols = {row[1] for row in conn.execute("PRAGMA table_info(prompts)")}
     if "agents" not in prompt_cols:

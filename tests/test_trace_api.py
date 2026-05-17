@@ -204,6 +204,7 @@ class Span:
     stdev_cost: float = 0.0
     started_at: int = 0
     ended_at: int = 0
+    model: str | None = None
     children: list[Any] = field(default_factory=list)
 
 @dataclass
@@ -269,6 +270,30 @@ class TestTraceTreeTemplate:
         out = tmpl.render(trace=trace)
         assert "loop" in out
         assert "×7" in out
+
+    def test_model_name_shown_in_indented_row(self, env):
+        """Indented row should display model name when present."""
+        tool = Span(id="s2", label="Read", kind="tool", tokens=100, cost=0.001,
+                    attribution="exact", model="claude-opus-4-7")
+        root = Span(id="s1", label="root turn", kind="turn", tokens=500, cost=0.01,
+                    attribution="exact", model="claude-sonnet-4-6", children=[tool])
+        trace = Trace(id="t", label="root turn", total_tokens=600, total_cost=0.011,
+                      duration_ms=0, turns=1, tools=1, tree=root)
+        tmpl = env.get_template("pages/trace_tree.html")
+        out = tmpl.render(trace=trace)
+        assert "claude-opus-4-7" in out
+        assert "claude-sonnet-4-6" in out
+
+    def test_model_name_omitted_when_none(self, env):
+        """Indented row should not show model span when model is None."""
+        root = Span(id="s1", label="root", kind="turn", tokens=100, cost=0.005,
+                    attribution="exact", model=None)
+        trace = Trace(id="t", label="root", total_tokens=100, total_cost=0.005,
+                      duration_ms=0, turns=1, tools=0, tree=root)
+        tmpl = env.get_template("pages/trace_tree.html")
+        out = tmpl.render(trace=trace)
+        # model span should be absent
+        assert "max-width: 14ch" not in out
 
     def test_empty_tree_no_spans_message(self, env):
         # A trace with tree=None should show "no spans" in icicle + indented panels
