@@ -62,9 +62,19 @@ _HOOK_ENTRY = {
     ],
 }
 
+_BURNMAP_BASE_URL = "http://localhost:7820"
+_STOP_HOOK_ENTRY = {
+    "hooks": [
+        {
+            "type": "command",
+            "command": f"bash -c 'curl -sf -X POST {_BURNMAP_BASE_URL}/api/hooks/stop -H \"Content-Type: application/json\" -d \"{{\\\"session_id\\\": \\\"$CLAUDE_SESSION_ID\\\"}}\" 2>/dev/null; true'",
+        }
+    ],
+}
+
 
 def _write_hooks_config(dry_run: bool = False) -> dict[str, Any]:
-    """Write or preview a PreToolUse hook entry in ~/.claude/settings.json.
+    """Write or preview PreToolUse + Stop hook entries in ~/.claude/settings.json.
 
     Returns a dict with keys: ok, dry_run, config_path, action, hook_entry.
     On error returns ok=False with an error key.
@@ -75,25 +85,38 @@ def _write_hooks_config(dry_run: bool = False) -> dict[str, Any]:
     except (json.JSONDecodeError, OSError) as exc:
         return {"ok": False, "error": f"Could not read {config_path}: {exc}"}
 
-    hooks_list: list[dict[str, Any]] = existing.setdefault("hooks", {}).setdefault("PreToolUse", [])
-    # Idempotent: skip if our socket is already referenced
-    already_installed = any(_SOCKET_PATH in json.dumps(h) for h in hooks_list)
+    hooks: dict[str, Any] = existing.setdefault("hooks", {})
+
+    # PreToolUse hook (precision mode)
+    pre_list: list[dict[str, Any]] = hooks.setdefault("PreToolUse", [])
+    pre_installed = any(_SOCKET_PATH in json.dumps(h) for h in pre_list)
+
+    # Stop hook (session finalization tripwire)
+    stop_list: list[dict[str, Any]] = hooks.setdefault("Stop", [])
+    stop_installed = any(_BURNMAP_BASE_URL in json.dumps(h) for h in stop_list)
+
+    already_installed = pre_installed and stop_installed
     action = "already_installed" if already_installed else ("preview" if dry_run else "written")
 
-    if not already_installed and not dry_run:
-        hooks_list.append(_HOOK_ENTRY)
-        try:
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            config_path.write_text(json.dumps(existing, indent=2))
-        except OSError as exc:
-            return {"ok": False, "error": f"Could not write {config_path}: {exc}"}
+    if not dry_run:
+        if not pre_installed:
+            pre_list.append(_HOOK_ENTRY)
+        if not stop_installed:
+            stop_list.append(_STOP_HOOK_ENTRY)
+        if not already_installed:
+            try:
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+                config_path.write_text(json.dumps(existing, indent=2))
+            except OSError as exc:
+                return {"ok": False, "error": f"Could not write {config_path}: {exc}"}
 
     return {
         "ok": True,
         "dry_run": dry_run,
         "config_path": str(config_path),
         "action": action,
-        "hook_entry": _HOOK_ENTRY if not already_installed else None,
+        "hook_entry": _HOOK_ENTRY if not pre_installed else None,
+        "stop_hook_entry": _STOP_HOOK_ENTRY if not stop_installed else None,
     }
 
 
@@ -178,6 +201,42 @@ if _FASTAPI:
         """Preview the hook config change without writing to disk."""
         result = _write_hooks_config(dry_run=True)
         return JSONResponse(result)
+
+    @router.post("/api/hooks/stop")
+    def hooks_stop(
+        session_id: str = Body("", embed=True),
+        db: sqlite3.Connection = Depends(_db),
+    ) -> JSONResponse:
+        """Receive Claude Code Stop hook event and finalize the session.
+
+        Marks the session's ended_at to now (if not already set) and closes
+        any spans that are still open (ended_at == 0).
+        """
+        import time
+        now_ms = int(time.time() * 1000)
+        updated_session = False
+        updated_spans = 0
+        if session_id:
+            row = db.execute(
+                "SELECT id, ended_at FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            if row and (row["ended_at"] == 0 or row["ended_at"] is None):
+                db.execute(
+                    "UPDATE sessions SET ended_at = ? WHERE id = ?", (now_ms, session_id)
+                )
+                updated_session = True
+            cur = db.execute(
+                "UPDATE spans SET ended_at = ? WHERE session_id = ? AND (ended_at = 0 OR ended_at IS NULL)",
+                (now_ms, session_id),
+            )
+            updated_spans = cur.rowcount
+            db.commit()
+        return JSONResponse({
+            "ok": True,
+            "session_id": session_id,
+            "updated_session": updated_session,
+            "updated_spans": updated_spans,
+        })
 
 else:
     router = None  # type: ignore[assignment]
