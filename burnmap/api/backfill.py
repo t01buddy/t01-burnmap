@@ -275,7 +275,7 @@ def _ingest_prompt_record(
         conn,
         fingerprint_hex=fp,
         session_id=session_id,
-        turn_id=turn_id,
+        turn_id=None,  # turns table not populated by backfill; avoid FK constraint
         ts=ts,
         input_tokens=input_tokens,
         cost_usd=cost_usd,
@@ -360,8 +360,8 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
                             conn, user_rec, record, session_id, agent, path,
                             content_conn=content_conn, content_mode=content_mode,
                         )
-                    except sqlite3.OperationalError:
-                        pass  # legacy schema without prompts/prompt_runs table
+                    except (sqlite3.OperationalError, sqlite3.IntegrityError):
+                        pass  # legacy schema without prompts/prompt_runs table, or FK not yet populated
                     except Exception as exc:
                         logger.warning("prompt ingest failed: %s", exc, exc_info=True)
 
