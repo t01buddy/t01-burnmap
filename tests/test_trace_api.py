@@ -232,14 +232,9 @@ class TestTraceTreeTemplate:
     def test_renders_without_error(self, env):
         tmpl = env.get_template("pages/trace_tree.html")
         out = tmpl.render(trace=make_trace())
-        assert "flame" in out
-        assert "indented" in out
-        assert "waterfall" in out
-
-    def test_icicle_bar_present(self, env):
-        tmpl = env.get_template("pages/trace_tree.html")
-        out = tmpl.render(trace=make_trace())
-        assert "icicle-bar" in out
+        assert "Indented tree" in out
+        assert "flame" not in out
+        assert "waterfall" not in out
 
     def test_indent_row_present(self, env):
         tmpl = env.get_template("pages/trace_tree.html")
@@ -295,18 +290,13 @@ class TestTraceTreeTemplate:
         # model span should be absent
         assert "max-width: 14ch" not in out
 
-    def test_empty_tree_no_spans_message(self, env):
-        # A trace with tree=None should show "no spans" in icicle + indented panels
-        # but waterfall_tab requires a tree node, so we only check icicle/indented
-        # by asserting the template renders the placeholder text when tree is falsy
+    def test_empty_tree_renders_indent_row(self, env):
         root = Span(id="r", label="root", kind="turn", tokens=0, cost=0.0,
                     attribution="exact", children=[])
         trace = Trace(id="t", label="empty", total_tokens=0, total_cost=0.0,
                       duration_ms=0, turns=0, tools=0, tree=root)
         tmpl = env.get_template("pages/trace_tree.html")
         out = tmpl.render(trace=trace)
-        # No children, but renders without error
-        assert "icicle-bar" in out
         assert "indent-row" in out
 
 
@@ -342,8 +332,8 @@ class TestTraceRouteSmoke:
         assert result is not None
         tmpl = env.get_template("pages/trace_tree.html")
         out = tmpl.render(trace=result)
-        assert "waterfall" in out
-        assert "icicle" in out
+        assert "Indented tree" in out
+        assert "indent-row" in out
 
     def test_trace_returns_none_for_missing(self):
         conn = sqlite3.connect(":memory:")
