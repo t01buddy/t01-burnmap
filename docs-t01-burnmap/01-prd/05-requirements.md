@@ -11,7 +11,7 @@
 | **Pricing** | Subscription = synthetic, API = real | P0 |
 | **Tree** | Span reconstruction per agent at feasible depth | P0 |
 | **Tree** | Attribution badges: `exact` (green) / `apportioned` (amber) / `inherited` (gray) | P0 |
-| **Tree** | Icicle + indented views over same data | P0 |
+| **Tree** | Indented tree view with collapsible rows | P0 |
 | **Tree** | Loop-collapse (>= 4 identical siblings) | P1 |
 | **Tree** | Stuck-loop detection (>= 20 identical, or cost trending up) | P1 |
 | **Prompts** | Fingerprinting, aggregates table, list page | P0 |

@@ -11,7 +11,7 @@ Sequential phases. Each ends with a shippable milestone.
 | **P2.75** | Tree reconstruction + subagent handling | 8–12 | parentUuid walker, sidechain merge, apportionment rules |
 | **P2.9** | Precision mode (Claude hooks) | 8–12 | Hook installer, Unix socket receiver, `span_events` merge |
 | **P4** | Prompts page + drill-down | 8–12 | List, filters, detail, histogram, outlier flags |
-| **P4.5** | Tree views: icicle + indented | 10–16 | Two views over one data source, loop-collapse rule |
+| **P4.5** | Tree view: indented | 6–10 | Indented tree over one data source, loop-collapse rule |
 | **P5** | Tasks page + slash / skill extraction | 6–10 | Same shape as prompts, over `agent_tasks` |
 | **P6** | Outlier nightly + top-N widgets | 3–5 | 2σ sweep, "this week" widgets, stuck-loop UI |
 | **P6.5** | Tool aggregates + cross-prompt page | 4–6 | Per-tool cost rollup |
