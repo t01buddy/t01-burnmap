@@ -1,4 +1,4 @@
-{# trace_tree.html — Trace tree page with flame / indented / waterfall tabs
+{# trace_tree.html — Trace tree page with indented view
    Props (passed via template context):
      trace  — trace object with .id, .label, .total_tokens, .total_cost,
                .duration_ms (may be 0), .turns, .tools, .tree (nested spans)
@@ -7,49 +7,10 @@
      .started_at (ms epoch, optional), .ended_at (ms epoch, optional)
 #}
 {% extends "base.html" %}
-{% from "components/waterfall.html" import waterfall_tab %}
 
 {% block title %}Trace — burnmap{% endblock %}
 
 {% block content %}
-
-{# ── Icicle macro ─────────────────────────────────────────────────────── #}
-{% macro icicle_row(node, depth, total_tokens) %}
-{% set tok = node.tokens if node.tokens else 0 %}
-{% set pct = ((tok / total_tokens * 100) if total_tokens > 0 else 0) | round(2) %}
-{% set kind_colors = {
-  "turn": "var(--accent)",
-  "tool": "#a78bfa",
-  "subagent": "#34d399",
-  "slash": "#f59e0b",
-  "skill": "#60a5fa",
-  "loop_block": "var(--alert)",
-} %}
-{% set bg = kind_colors.get(node.kind, "#94a3b8") %}
-<div class="icicle-row"
-     style="margin-left: {{ depth * 12 }}px; margin-bottom: 2px;"
-     :class="selectedId === '{{ node.id }}' ? 'icicle-row--selected' : ''"
-     @click="select('{{ node.id }}')">
-  <div class="icicle-bar"
-       style="width: {{ [pct, 100] | min }}%; background: {{ bg }}; min-width: 4px;"
-       title="{{ node.label if node.label else node.name }} ({{ tok }} tok)">
-    {% if pct > 8 %}
-    <span class="icicle-label">{{ node.label if node.label else node.name }}</span>
-    {% endif %}
-  </div>
-  <span class="icicle-meta">
-    {% if node.kind == "loop_block" %}
-      ×{{ node.count }} mean ${{ "%.4f"|format(node.mean_cost if node.mean_cost else 0) }} σ{{ "%.4f"|format(node.stdev_cost if node.stdev_cost else 0) }}
-    {% else %}
-      {{ tok }} tok · ${{ "%.4f"|format(node.cost if node.cost else 0) }}
-      <span class="attr-tag attr-tag--{{ node.attribution if node.attribution else 'inherited' }}">{{ node.attribution if node.attribution else 'inherited' }}</span>
-    {% endif %}
-  </span>
-</div>
-{% for child in node.children %}
-  {{ icicle_row(child, depth + 1, total_tokens) }}
-{% endfor %}
-{% endmacro %}
 
 {# ── Indented tree macro ───────────────────────────────────────────────── #}
 {% macro indent_node(node, depth) %}
@@ -107,35 +68,8 @@
     </div>
   </div>
 
-  {# ── Tab bar ──────────────────────────────────────────────────── #}
-  <div class="row" style="margin-bottom: 10px; gap: 4px; border-bottom: 1px solid var(--rule-soft);">
-    {% for tab_name in ["flame", "indented", "waterfall"] %}
-    <button class="btn btn--ghost"
-      style="border-radius: 0; padding: 8px 14px;"
-      :style="tab === '{{ tab_name }}' ? 'border-bottom: 2px solid var(--ink);' : 'border-bottom: 2px solid transparent;'"
-      @click="tab = '{{ tab_name }}'">{{ tab_name }}</button>
-    {% endfor %}
-    <span class="spacer"></span>
-  </div>
-
-  {# ── Flame / Icicle tab ───────────────────────────────────────── #}
-  <div x-show="tab === 'flame'" class="card">
-    <div class="card__h">
-      <h3 style="margin: 0;">Icicle chart — width ∝ tokens</h3>
-      <span class="spacer"></span>
-      <span class="meta muted" style="font-size:11px;">click to sync selection</span>
-    </div>
-    <div class="card__body card__body--flush" style="padding: 6px; overflow-x: auto;">
-      {% if trace.tree %}
-        {{ icicle_row(trace.tree, 0, trace.total_tokens) }}
-      {% else %}
-        <div class="icicle-placeholder">no spans</div>
-      {% endif %}
-    </div>
-  </div>
-
-  {# ── Indented tab ─────────────────────────────────────────────── #}
-  <div x-show="tab === 'indented'" class="card">
+  {# ── Indented tree ─────────────────────────────────────────────── #}
+  <div class="card">
     <div class="card__h">
       <h3 style="margin: 0;">Indented tree</h3>
       <span class="spacer"></span>
@@ -150,23 +84,9 @@
     </div>
   </div>
 
-  {# ── Waterfall tab ────────────────────────────────────────────── #}
-  <div x-show="tab === 'waterfall'">
-    {{ waterfall_tab(trace) }}
-  </div>
-
 </div>
 
 <style>
-/* ── Icicle ── */
-.icicle-row        { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 1px 4px; border-radius: 3px; }
-.icicle-row--selected { background: var(--rule-soft); }
-.icicle-row:hover  { background: var(--rule-soft); }
-.icicle-bar        { height: 20px; border-radius: 3px; display: flex; align-items: center; overflow: hidden; transition: width 0.2s; }
-.icicle-label      { font-size: 10px; font-family: var(--font-mono); color: #fff; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.icicle-meta       { font-size: 10.5px; font-family: var(--font-mono); color: var(--ink-3); white-space: nowrap; }
-.icicle-placeholder { height: 80px; display: flex; align-items: center; justify-content: center; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
-
 /* ── Indented tree ── */
 .indent-row        { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 3px 0; border-radius: 3px; }
 .indent-row--selected { background: var(--rule-soft); }
@@ -187,7 +107,6 @@
 <script>
 function traceTreePage() {
   return {
-    tab: "flame",
     selectedId: null,
     init() {},
     select(id) {
