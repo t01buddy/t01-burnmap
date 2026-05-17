@@ -18,6 +18,7 @@ def main() -> None:
         print("  token         Manage auth tokens (--create)")
         print("  serve         Start the FastAPI server (--host, --port, --reload)")
         print("  content       Manage prompt content (wipe, mode)")
+        print("  statusline    Emit one-line summary for Claude Code statusline API")
         return
 
     if args[0] == "token":
@@ -26,6 +27,8 @@ def main() -> None:
         _cmd_serve(args[1:])
     elif args[0] == "content":
         _cmd_content(args[1:])
+    elif args[0] == "statusline":
+        _cmd_statusline()
     elif args[0] == "sweep":
         conn = get_db()
         init_db(conn)
@@ -84,6 +87,48 @@ def _cmd_content(args: list[str]) -> None:
     else:
         print(f"Unknown content subcommand: {args[0]}", file=sys.stderr)
         sys.exit(1)
+
+
+def _cmd_statusline() -> None:
+    """Emit a one-line burnmap summary for Claude Code's statusline API.
+
+    Output format: "burnmap | N sessions · $X.XXXX today · A live"
+    Non-blocking: returns immediately with stale data on DB error.
+    """
+    import time
+    try:
+        conn = get_db()
+        init_db(conn)
+        now_ms = int(time.time() * 1000)
+        day_ms = 24 * 60 * 60 * 1000
+        hour_ms = 60 * 60 * 1000
+
+        # Sessions in last 24h
+        row = conn.execute(
+            "SELECT COUNT(*) FROM sessions WHERE started_at >= ?",
+            (now_ms - day_ms,),
+        ).fetchone()
+        session_count = row[0] if row else 0
+
+        # Total cost from spans in last 24h
+        row = conn.execute(
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM spans WHERE started_at >= ?",
+            (now_ms - day_ms,),
+        ).fetchone()
+        cost_today = row[0] if row else 0.0
+
+        # Live agents: sessions started in last hour with no ended_at
+        row = conn.execute(
+            "SELECT COUNT(DISTINCT agent) FROM sessions "
+            "WHERE started_at >= ? AND (ended_at = 0 OR ended_at IS NULL)",
+            (now_ms - hour_ms,),
+        ).fetchone()
+        live_agents = row[0] if row else 0
+
+        conn.close()
+        print(f"burnmap | {session_count} sessions · ${cost_today:.4f} today · {live_agents} live")
+    except Exception:
+        print("burnmap | unavailable")
 
 
 def _cmd_serve(args: list[str]) -> None:
