@@ -402,6 +402,10 @@ def run_backfill(conn: sqlite3.Connection) -> dict[str, Any]:
             spans_added += _ingest_jsonl_file(conn, agent, path)
         done += 1
 
+    # Run outlier sweep so /outliers page reflects current data immediately
+    from burnmap.outliers import sweep as _sweep
+    outlier_result = _sweep(conn)
+
     row = conn.execute(
         "SELECT COUNT(DISTINCT session_id) AS s, COUNT(*) AS sp FROM spans"
     ).fetchone()
@@ -421,6 +425,8 @@ def run_backfill(conn: sqlite3.Connection) -> dict[str, Any]:
         "prompts_ingested": prompt_row["p"] if prompt_row else 0,
         "prompt_runs_ingested": prompt_row["pr"] if prompt_row else 0,
         "pct": 100 if total == 0 else round(done / total * 100),
+        "outliers_flagged": outlier_result.flagged,
+        "outliers_cleared": outlier_result.cleared,
     }
 
 

@@ -273,3 +273,56 @@ class TestQueryBackfillStatus:
         run_backfill(conn)
         result = query_backfill_status(conn)
         assert result["first_run"] is False
+
+
+# ── Outlier sweep wiring ──────────────────────────────────────────────────────
+
+class TestBackfillOutlierSweep:
+    """Regression: run_backfill must call sweep so is_outlier is set without CLI."""
+
+    def _make_turn_with_cost(self, session_id: str, cost: float) -> dict:
+        return {
+            "uuid": str(uuid.uuid4()),
+            "sessionId": session_id,
+            "message": {
+                "role": "assistant",
+                "usage": {"input_tokens": 100, "output_tokens": 50},
+            },
+            "name": "fp:outlier-test",
+            "costUSD": cost,
+        }
+
+    def test_backfill_flags_outlier_span(self, conn, tmp_path, monkeypatch):
+        """Seed 10 cheap + 1 expensive span; after backfill is_outlier=1 on the expensive one.
+
+        Uses 10 cheap spans so mean+2sigma stays below the expensive span's cost.
+        With 4 samples the extreme value inflates mean+sigma enough to miss the threshold.
+        """
+        import burnmap.api.backfill as mod
+
+        records = [
+            self._make_turn_with_cost(f"sess-cheap-{i}", 0.001)
+            for i in range(10)
+        ]
+        records.append(self._make_turn_with_cost("sess-expensive", 1.0))  # clear outlier
+        f = _write_jsonl(tmp_path / "fixture.jsonl", records)
+        monkeypatch.setattr(mod, "_discover_files", lambda: [("claude_code", f)])
+
+        result = run_backfill(conn)
+
+        assert "outliers_flagged" in result
+        assert result["outliers_flagged"] >= 1
+
+        outlier_rows = conn.execute(
+            "SELECT COUNT(*) AS n FROM spans WHERE is_outlier=1"
+        ).fetchone()
+        assert outlier_rows["n"] >= 1
+
+    def test_backfill_sweep_result_in_response(self, conn, tmp_path, monkeypatch):
+        """run_backfill result must include outliers_flagged and outliers_cleared keys."""
+        import burnmap.api.backfill as mod
+        f = _write_jsonl(tmp_path / "f.jsonl", [_make_turn("sess-x")])
+        monkeypatch.setattr(mod, "_discover_files", lambda: [("claude_code", f)])
+        result = run_backfill(conn)
+        assert "outliers_flagged" in result
+        assert "outliers_cleared" in result
