@@ -131,3 +131,53 @@ async def test_file_write_triggers_event(tmp_path):
     assert event is not None
     assert event["type"] in ("file_changed", "file_created")
     assert "session.jsonl" in event["path"]
+
+
+@pytest.mark.asyncio
+async def test_watch_and_ingest_triggers_backfill(tmp_path):
+    """Regression: watcher event fires → _watch_and_ingest calls run_backfill."""
+    import sqlite3
+    import burnmap.app as app_module
+    from unittest.mock import patch
+
+    ingest_calls: list = []
+
+    def fake_run_backfill(db):
+        ingest_calls.append(True)
+        return {"sessions_ingested": 1, "spans_ingested": 5}
+
+    def fake_get_db():
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    # Patch debounce to near-zero so test runs fast
+    original_debounce = None
+    with patch("burnmap.api.backfill.run_backfill", fake_run_backfill), \
+         patch("burnmap.db.get_db", fake_get_db):
+
+        watcher = Watcher()
+        watcher.start([str(tmp_path)])
+
+        # Inject a small debounce directly via queue event rather than timing
+        task = asyncio.create_task(app_module._watch_and_ingest(watcher))
+        await asyncio.sleep(0.2)  # let observer warm up
+
+        # Write a file to trigger watchdog event
+        test_file = tmp_path / "session.jsonl"
+        test_file.write_text('{"session_id": "abc"}\n')
+
+        # Wait up to 6s (2s debounce + 1s buffer + IO)
+        for _ in range(60):
+            if ingest_calls:
+                break
+            await asyncio.sleep(0.1)
+
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        watcher.stop()
+
+    assert len(ingest_calls) >= 1, "run_backfill was not called after watcher file event"
