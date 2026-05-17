@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from t01_burnmap.adapters.codex import CodexAdapter
+from burnmap.adapters.codex import CodexAdapter
 
 FIXTURES = Path(__file__).parent / "fixtures" / "codex"
 

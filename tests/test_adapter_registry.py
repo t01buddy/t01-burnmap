@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Any
 import pytest
-from t01_burnmap.adapters import BaseAdapter, AdapterRegistry
+from burnmap.adapters import BaseAdapter, AdapterRegistry
 
 
 class MockAdapter(BaseAdapter):

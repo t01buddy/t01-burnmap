@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import pytest
-from t01_burnmap.adapters.claude_code import ClaudeCodeAdapter
+from burnmap.adapters.claude_code import ClaudeCodeAdapter
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "claude_code"

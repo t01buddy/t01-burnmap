@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from t01_burnmap.adapters.cline import ClineAdapter
+from burnmap.adapters.cline import ClineAdapter
 
 FIXTURES = Path(__file__).parent / "fixtures" / "cline"
 

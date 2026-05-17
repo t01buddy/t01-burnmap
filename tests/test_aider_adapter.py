@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import pytest
-from t01_burnmap.adapters.aider import AiderAdapter
+from burnmap.adapters.aider import AiderAdapter
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "aider"
