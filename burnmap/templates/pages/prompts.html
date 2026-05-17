@@ -22,10 +22,10 @@
                x-model="search"
                @input.debounce.300ms="load()"/>
         <select class="sort-select" x-model="sort" @change="load()">
+          <option value="recent">Sort: Recent</option>
           <option value="cost">Sort: Cost</option>
           <option value="runs">Sort: Runs</option>
           <option value="tokens">Sort: Tokens</option>
-          <option value="recent">Sort: Recent</option>
         </select>
         <span class="spacer"></span>
         <span class="mono muted" style="font-size:11px;align-self:center"
@@ -238,7 +238,7 @@ function promptsPage() {
     count: 0,
     loading: false,
     search: '',
-    sort: 'cost',
+    sort: 'recent',
     selectedFp: null,
     detail: null,
     detailLoading: false,
