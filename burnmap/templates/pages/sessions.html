@@ -9,6 +9,7 @@
   <div class="page-header">
     <h1 class="page-title">Sessions</h1>
     <span class="meta" style="font-size:12px;color:var(--ink-3)">browse · search · filter</span>
+    <button class="btn btn--primary" @click="refreshData($event)">Refresh data</button>
   </div>
 
   <!-- Search + filter controls -->
@@ -162,6 +163,25 @@ function sessionsPage() {
       if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
       if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
       return String(n);
+    },
+
+    async refreshData(event) {
+      const btn = event.target;
+      btn.disabled = true;
+      btn.textContent = 'Refreshing…';
+      try {
+        const r = await fetch('/api/backfill/run', { method: 'POST' });
+        if (r.ok) {
+          const data = await r.json();
+          await this.load();
+          btn.textContent = 'Refresh data';
+        } else {
+          const msg = await r.text().catch(() => r.status);
+          btn.textContent = 'Error — retry';
+        }
+      } finally {
+        btn.disabled = false;
+      }
     },
   };
 }
