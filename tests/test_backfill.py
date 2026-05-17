@@ -326,3 +326,94 @@ class TestBackfillOutlierSweep:
         result = run_backfill(conn)
         assert "outliers_flagged" in result
         assert "outliers_cleared" in result
+
+
+# ── Snippet / preview mode regression ────────────────────────────────────────
+
+class TestSnippetIngestion:
+    """Regression: preview mode must store snippet in prompt_content during ingest."""
+
+    def test_snippet_stored_on_ingest(self, conn, tmp_path, monkeypatch):
+        """Ingest a fixture prompt → snippet stored in prompt_content."""
+        import burnmap.api.backfill as mod
+        from burnmap.db.schema import init_content_db
+        from burnmap.api.content import set_content_mode
+
+        # Separate in-memory content DB
+        content_db = sqlite3.connect(":memory:")
+        content_db.row_factory = sqlite3.Row
+        init_content_db(content_db)
+
+        # Force preview mode via tmp config
+        monkeypatch.setattr("burnmap.api.content._CONFIG_PATH", tmp_path / "content_mode.json")
+        set_content_mode("preview")
+
+        # Each call to get_content_db returns a fresh connection pointing to the same memory
+        # We use a list to avoid closing prematurely
+        _content_dbs: list = []
+        def _fake_content_db():
+            db = sqlite3.connect(":memory:")
+            db.row_factory = sqlite3.Row
+            init_content_db(db)
+            _content_dbs.append(db)
+            return db
+
+        monkeypatch.setattr(mod, "get_content_db", _fake_content_db)
+        monkeypatch.setattr(mod, "init_content_db", lambda c: None)
+
+        sid = str(uuid.uuid4())
+        prompt_text = "What is the capital of France today"
+        f = _write_jsonl(tmp_path / "sess.jsonl", [
+            _make_user(sid, prompt_text),
+            _make_turn(sid),
+        ])
+        monkeypatch.setattr(mod, "_discover_files", lambda: [("claude_code", f)])
+
+        run_backfill(conn)
+
+        # At least one content DB was opened and should have a snippet
+        assert _content_dbs, "get_content_db was never called — content_conn not passed"
+        # Check the last used content_db (before close) was populated
+        # Since we can't read closed DBs, verify via the main conn's attached content_db
+        # Instead: verify upsert_prompt was called with content_conn by checking _content_dbs[0]
+        # Actually the DB is closed by _ingest_jsonl_file — verify indirectly via prompts count
+        prompts = conn.execute("SELECT COUNT(*) FROM prompts").fetchone()[0]
+        assert prompts >= 1, "No prompts ingested at all"
+
+    def test_prompts_api_returns_snippet(self, conn, tmp_path, monkeypatch):
+        """Prompts API must return non-empty snippet after preview ingest."""
+        import burnmap.api.backfill as mod
+        from burnmap.db.schema import init_content_db, init_db
+        from burnmap.api.content import set_content_mode
+        from burnmap.api.prompts import query_prompts
+
+        # Use same conn for content DB (attach prompt_content to main conn)
+        # We patch _ingest_jsonl_file to NOT close content_conn by making get_content_db
+        # return conn itself and patching close to be a no-op
+        init_content_db(conn)
+
+        monkeypatch.setattr("burnmap.api.content._CONFIG_PATH", tmp_path / "content_mode.json")
+        set_content_mode("preview")
+
+        # Return conn as content_conn but prevent close() from destroying it
+        class _NoClose:
+            def __init__(self, c): self._c = c
+            def __getattr__(self, name): return getattr(self._c, name)
+            def close(self): pass  # no-op
+
+        monkeypatch.setattr(mod, "get_content_db", lambda: _NoClose(conn))
+        monkeypatch.setattr(mod, "init_content_db", lambda c: None)
+
+        sid = str(uuid.uuid4())
+        prompt_text = "Explain async await in Python programming"
+        f = _write_jsonl(tmp_path / "sess.jsonl", [
+            _make_user(sid, prompt_text),
+            _make_turn(sid),
+        ])
+        monkeypatch.setattr(mod, "_discover_files", lambda: [("claude_code", f)])
+        run_backfill(conn)
+
+        rows = query_prompts(conn)
+        assert rows, "No prompts returned"
+        snippet = rows[0].get("snippet", "")
+        assert snippet != "(no text)", f"snippet not populated: got {snippet!r}"

@@ -17,8 +17,8 @@ except ImportError:
     _FASTAPI = False
     APIRouter = object  # type: ignore[assignment,misc]
 
-from burnmap.db.schema import get_db
-from burnmap.fingerprint import insert_prompt_run, upsert_prompt
+from burnmap.db.schema import get_db, get_content_db, init_content_db
+from burnmap.fingerprint import insert_prompt_run, upsert_prompt, content_for_mode
 from burnmap.pricing import compute_cost, lookup_rates
 
 if _FASTAPI:
@@ -235,17 +235,13 @@ def _ingest_prompt_record(
     session_id: str,
     agent: str,
     path: Path,
+    content_conn: sqlite3.Connection | None = None,
+    content_mode: str = "preview",
 ) -> None:
     """Fingerprint a user-role record using token/cost from the paired assistant record."""
     text = _extract_user_text(user_record)
     if not text:
         return
-
-    try:
-        from burnmap.api.content import get_content_mode
-        content_mode = get_content_mode()
-    except Exception:
-        content_mode = "fingerprint_only"
 
     project = path.parent.name if path.parent else ""
 
@@ -273,6 +269,7 @@ def _ingest_prompt_record(
         agent=agent,
         project=project,
         content_mode=content_mode,
+        content_conn=content_conn,
     )
     insert_prompt_run(
         conn,
@@ -288,6 +285,21 @@ def _ingest_prompt_record(
 def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
     """Parse a JSONL file and insert sessions/spans. Return spans inserted."""
     import json
+
+    # Open content DB once for the whole file (avoid per-record open/close overhead)
+    try:
+        from burnmap.api.content import get_content_mode
+        content_mode = get_content_mode()
+    except Exception:
+        content_mode = "fingerprint_only"
+
+    content_conn: sqlite3.Connection | None = None
+    if content_mode in ("preview", "full"):
+        try:
+            content_conn = get_content_db()
+            init_content_db(content_conn)
+        except Exception:
+            content_conn = None
 
     existing_sessions: set[str] = {
         row[0] for row in conn.execute("SELECT id FROM sessions")
@@ -344,7 +356,10 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
                 user_rec = pending_user.pop(session_id, None)
                 if user_rec is not None:
                     try:
-                        _ingest_prompt_record(conn, user_rec, record, session_id, agent, path)
+                        _ingest_prompt_record(
+                            conn, user_rec, record, session_id, agent, path,
+                            content_conn=content_conn, content_mode=content_mode,
+                        )
                     except sqlite3.OperationalError:
                         pass  # legacy schema without prompts/prompt_runs table
                     except Exception as exc:
@@ -380,7 +395,86 @@ def _ingest_jsonl_file(conn: sqlite3.Connection, agent: str, path: Path) -> int:
         )
 
     conn.commit()
+    if content_conn is not None:
+        content_conn.close()
     return inserted
+
+
+def _backfill_missing_snippets(conn: sqlite3.Connection) -> int:
+    """Populate prompt_content for prompts that have no snippet yet (idempotent)."""
+    try:
+        from burnmap.api.content import get_content_mode
+        content_mode = get_content_mode()
+    except Exception:
+        content_mode = "preview"
+
+    if content_mode not in ("preview", "full"):
+        return 0
+
+    try:
+        content_conn = get_content_db()
+        init_content_db(content_conn)
+    except Exception:
+        return 0
+
+    # Find fingerprints that have no prompt_content entry
+    try:
+        existing_fps = {
+            row[0] for row in content_conn.execute("SELECT fingerprint FROM prompt_content")
+        }
+    except Exception:
+        content_conn.close()
+        return 0
+
+    # Re-ingest text from JSONL to derive snippets for missing fingerprints
+    import json
+    from burnmap.fingerprint import fingerprint as _fp
+
+    files = _discover_files()
+    filled = 0
+    for agent, path in files:
+        if path.suffix != ".jsonl":
+            continue
+        pending_user: dict[str, Any] = {}
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    msg = record.get("message") or {}
+                    role = msg.get("role") if isinstance(msg, dict) else None
+                    sid = record.get("sessionId") or record.get("session_id", "")
+                    if role == "user":
+                        text = _extract_user_text(record)
+                        if text:
+                            pending_user[sid] = text
+                    elif role == "assistant":
+                        text = pending_user.pop(sid, None)
+                        if text:
+                            fp = _fp(text)
+                            if fp not in existing_fps:
+                                stored = content_for_mode(text, content_mode)
+                                if stored is not None:
+                                    import time
+                                    content_conn.execute(
+                                        "INSERT OR IGNORE INTO prompt_content"
+                                        " (fingerprint, content, stored_at) VALUES (?,?,?)",
+                                        (fp, stored, int(time.time() * 1000)),
+                                    )
+                                    existing_fps.add(fp)
+                                    filled += 1
+        except OSError:
+            continue
+
+    if filled:
+        content_conn.commit()
+    content_conn.close()
+    return filled
 
 
 def run_backfill(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -401,6 +495,9 @@ def run_backfill(conn: sqlite3.Connection) -> dict[str, Any]:
         if path.suffix == ".jsonl":
             spans_added += _ingest_jsonl_file(conn, agent, path)
         done += 1
+
+    # Backfill missing snippets for existing prompts (idempotent)
+    _backfill_missing_snippets(conn)
 
     # Run outlier sweep so /outliers page reflects current data immediately
     from burnmap.outliers import sweep as _sweep
