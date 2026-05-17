@@ -34,6 +34,12 @@
     <!-- Analyze section -->
     <div class="rail__section">
       <div class="rail__label">Analyze</div>
+      <a href="/sessions" class="rail__link" :class="{'is-active': page === 'sessions'}">
+        <span class="rail__glyph">
+          <svg viewBox="0 0 14 14" width="14" height="14"><rect x="3" y="3" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+        </span>
+        <span>Sessions</span>
+      </a>
       <a href="/prompts" class="rail__link" :class="{'is-active': page === 'prompts'}">
         <span class="rail__glyph">
           <svg viewBox="0 0 14 14" width="14" height="14"><rect x="2" y="3" width="10" height="1.4" fill="currentColor"/><rect x="2" y="6.3" width="10" height="1.4" fill="currentColor"/><rect x="2" y="9.6" width="10" height="1.4" fill="currentColor"/></svg>
@@ -57,12 +63,6 @@
           <svg viewBox="0 0 14 14" width="14" height="14"><rect x="2" y="7" width="2" height="5" fill="currentColor"/><rect x="6" y="4" width="2" height="8" fill="currentColor"/><rect x="10" y="2" width="2" height="10" fill="currentColor"/></svg>
         </span>
         <span>Tools</span>
-      </a>
-      <a href="/sessions" class="rail__link" :class="{'is-active': page === 'sessions'}">
-        <span class="rail__glyph">
-          <svg viewBox="0 0 14 14" width="14" height="14"><rect x="3" y="3" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
-        </span>
-        <span>Sessions</span>
       </a>
       <a href="/outliers" class="rail__link" :class="{'is-active': page === 'outliers'}">
         <span class="rail__glyph">
