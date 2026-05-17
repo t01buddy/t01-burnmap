@@ -79,6 +79,20 @@ async def lifespan(app: FastAPI):
                 result = await backfill_fut
                 await pricing_fut
             logger.info("Backfill complete: %s", result)
+        else:
+            # Existing DB — run outlier sweep so /outliers page is up to date
+            try:
+                from burnmap.outliers import sweep as _sweep
+                loop = asyncio.get_running_loop()
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    outlier_result = await loop.run_in_executor(pool, _sweep, db)
+                logger.info(
+                    "Startup sweep: flagged=%d cleared=%d",
+                    outlier_result.flagged, outlier_result.cleared,
+                )
+            except Exception:
+                logger.exception("Startup outlier sweep failed")
     except Exception:
         logger.exception("Backfill failed on startup")
 
